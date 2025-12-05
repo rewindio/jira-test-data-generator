@@ -9,9 +9,11 @@ A Python tool to generate realistic test data for Jira instances based on produc
 - **Intelligent Rate Limiting** - Automatically backs off when hitting rate limits
 - **Production-Based Multipliers** - Creates realistic data distributions from CSV config
 - **Dynamic Project Creation** - Automatically creates projects based on multipliers
+- **Auto Admin Role** - Automatically grants Project Administrator role for watcher permissions
 - **Easy Cleanup** - All items tagged with searchable labels for easy JQL queries
 - **Size-Based Generation** - Supports Small/Medium/Large/XLarge instance profiles
 - **Dry Run Mode** - Preview what will be created without making changes
+- **User Generator** - Helper script to invite sandbox users and create groups
 
 ## What Gets Created
 
@@ -23,6 +25,7 @@ Based on the size bucket you choose, the tool creates:
 - **Worklogs** (7.27x for small, decreases for larger)
 - **Issue Links** (~0.3x)
 - **Watchers** (2.51x for small, 3.95x for medium)
+- **Attachments** (2.1x for small, random 1-500KB files)
 - **Project Versions** (1.76x for small)
 - **Project Components** (0.49x for small)
 - And more...
@@ -158,7 +161,7 @@ The tool uses async I/O to make concurrent API requests, significantly speeding 
 ### How It Works
 
 - **Projects, Issues, Components, Versions**: Created sequentially (low volume or already bulk-optimized)
-- **Comments, Worklogs, Issue Links, Watchers**: Created concurrently using asyncio
+- **Comments, Worklogs, Issue Links, Watchers, Attachments**: Created concurrently using asyncio
 - **Rate Limiting**: Shared across all concurrent requests with thread-safe tracking
 
 ### Concurrency Guidelines
@@ -399,6 +402,7 @@ project,0.00249,0.00066,0.00032,0.00001
 | Worklogs | **Async** | High volume |
 | Issue Links | **Async** | Medium-high volume |
 | Watchers | **Async** | Medium-high volume |
+| Attachments | **Async** | High volume, larger payloads |
 
 ### Error Handling
 
@@ -407,11 +411,108 @@ project,0.00249,0.00066,0.00032,0.00001
 - Graceful degradation on failures
 - Detailed logging with `--verbose`
 
+## User Generator
+
+A helper script to create sandbox test users and groups in your Jira instance.
+
+### Why Use This?
+
+- Create multiple test users with a single command
+- Users are created with plus-addressing format (`user+sandbox1@domain.com`)
+- All emails route to your inbox for easy management
+- Automatically grants Jira product access
+
+### Basic Usage
+
+```bash
+# Invite 5 sandbox users with Jira Software access
+python jira_user_generator.py \
+  --url https://mycompany.atlassian.net \
+  --email admin@company.com \
+  --base-email dave.north@rewind.io \
+  --users 5
+```
+
+### With Groups
+
+```bash
+# Create users and groups
+python jira_user_generator.py \
+  --url https://mycompany.atlassian.net \
+  --email admin@company.com \
+  --base-email dave.north@rewind.io \
+  --users 10 \
+  --groups "Test Team 1" "Test Team 2"
+```
+
+### User Generator Options
+
+| Option | Required | Description | Default |
+|--------|----------|-------------|---------|
+| `--url` | Yes | Jira instance URL | - |
+| `--email` | Yes | Your Jira admin email | - |
+| `--token` | No* | API token | From env |
+| `--base-email` | Yes | Base email for sandbox users | - |
+| `--users` | Yes | Number of users to create | - |
+| `--groups` | No | Group names to create | None |
+| `--products` | No | Jira products to grant access | `jira-software` |
+| `--user-prefix` | No | Display name prefix | `Sandbox` |
+| `--dry-run` | No | Preview only | `false` |
+
+### Available Products
+
+- `jira-software` (default)
+- `jira-core`
+- `jira-servicedesk`
+- `jira-product-discovery`
+
+### Generated Email Format
+
+```
+dave.north+sandbox1@rewind.io
+dave.north+sandbox2@rewind.io
+dave.north+sandbox3@rewind.io
+...
+```
+
+### Output Example
+
+```
+============================================================
+Starting Jira user/group generation
+Base email: dave.north@rewind.io
+User count: 5
+Products: jira-software
+Groups: Test Team 1, Test Team 2
+============================================================
+
+Groups created: 2
+  - Test Team 1
+  - Test Team 2
+
+Users invited: 5
+  - dave.north+sandbox1@rewind.io (accountId: abc123)
+  - dave.north+sandbox2@rewind.io (accountId: def456)
+  ...
+
+Summary:
+  Users:  0 existing, 5 invited, 0 failed
+  Groups: 0 existing, 2 created
+```
+
+### Permissions Required
+
+Your API token needs:
+- **Site admin** or **User access admin** permissions to invite users
+- **Browse users and groups** permission to check existing users
+
+---
+
 ## Contributing
 
 Feel free to extend this! Some ideas:
 
-- [ ] Add attachment generation
+- [x] Add attachment generation
 - [ ] Support for custom fields
 - [ ] Sprint creation
 - [ ] Board configuration

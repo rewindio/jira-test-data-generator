@@ -10,6 +10,7 @@
 - Intelligent rate limit handling with exponential backoff
 - Production-based multipliers loaded from CSV file
 - Dynamic project creation based on multipliers
+- Auto-assigns Project Administrator role for watcher permissions
 - Unique run ID labeling for easy JQL searching
 - Support for 4 instance size buckets (small/medium/large/xlarge)
 
@@ -22,6 +23,7 @@
 ```
 .
 ├── jira_data_generator.py    # Main application (~1200 lines)
+├── jira_user_generator.py    # User/group creation helper (~480 lines)
 ├── item_type_multipliers.csv # Multiplier configuration
 ├── requirements.txt          # Python dependencies
 ├── .env.example             # API token template
@@ -545,7 +547,91 @@ self.logger.debug("Detailed info")       # Verbose mode only
 
 ---
 
+## User Generator Script
+
+### Overview
+
+`jira_user_generator.py` is a helper script for creating sandbox test users and groups.
+
+### Key Classes
+
+#### `JiraUserGenerator`
+- **Purpose**: Invite users and create groups in Jira Cloud
+- **Key Properties**:
+  - `VALID_PRODUCTS`: List of valid Jira product names
+  - `products`: List of products to grant access (default: `['jira-software']`)
+  - `created_users[]`: Track invited users
+  - `existing_users[]`: Track users that already exist
+  - `created_groups[]`: Track created groups
+  - `existing_groups[]`: Track groups that already exist
+
+### Key Methods
+
+#### `generate_sandbox_email(base_email, index)`
+Generates plus-addressed email:
+```python
+# dave.north@rewind.io → dave.north+sandbox1@rewind.io
+```
+
+#### `check_user_exists(email)`
+- Searches via `GET /rest/api/3/user/search`
+- Note: Only finds users with Jira product access (not org-only users)
+
+#### `create_user(email, display_name)`
+- Invites user via `POST /rest/api/3/user`
+- Passes `products` array to grant Jira access
+- Requires site-admin or user-access-admin permissions
+
+#### `create_group(group_name)`
+- Creates group via `POST /rest/api/3/group`
+- Checks for existing groups first
+
+### API Endpoints Used
+
+- `GET /rest/api/3/user/search` - Find existing users
+- `POST /rest/api/3/user` - Invite/create users
+- `GET /rest/api/3/group/bulk` - Find existing groups
+- `POST /rest/api/3/group` - Create groups
+- `POST /rest/api/3/group/user` - Add user to group
+
+### Important Notes
+
+1. **Product Access**: Users invited with `products: []` only exist at org level (admin.atlassian.com), not in Jira. Always specify products.
+
+2. **User Search Limitation**: The `/user/search` endpoint only returns users who have active Jira product access. Users in the org without product access won't be found.
+
+3. **Valid Products**:
+   - `jira-software`
+   - `jira-core`
+   - `jira-servicedesk`
+   - `jira-product-discovery`
+
+### Command Line Options
+
+| Option | Required | Description | Default |
+|--------|----------|-------------|---------|
+| `--url` | Yes | Jira instance URL | - |
+| `--email` | Yes | Your Jira admin email | - |
+| `--token` | No* | API token | From env |
+| `--base-email` | Yes | Base email for sandbox users | - |
+| `--users` | Yes | Number of users to create | - |
+| `--groups` | No | Group names to create | None |
+| `--products` | No | Products to grant access | `jira-software` |
+| `--user-prefix` | No | Display name prefix | `Sandbox` |
+| `--dry-run` | No | Preview only | `false` |
+| `--verbose` | No | Debug logging | `false` |
+
+---
+
 ## Version History
+
+- **v1.2** (2024-12-05): User generator script
+  - New `jira_user_generator.py` helper script
+  - Invite sandbox users with plus-addressing
+  - Create groups
+  - Grant Jira product access (jira-software, etc.)
+  - Check for existing users/groups before creating
+  - `--products` flag to control product access
 
 - **v1.1** (2024-12-05): Async concurrency support
   - Added aiohttp for async HTTP requests

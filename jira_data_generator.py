@@ -117,7 +117,7 @@ class JiraDataGenerator:
         # Async session (created lazily)
         self._async_session: Optional[aiohttp.ClientSession] = None
         self._semaphore: Optional[asyncio.Semaphore] = None
-        
+
         # Track created items for linking
         self.created_issues = []
         self.created_users = []
@@ -127,10 +127,10 @@ class JiraDataGenerator:
 
         # Project ID (fetched lazily)
         self._project_id = None
-        
+
         # Generate unique label for this run
         self.run_id = f"{prefix}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-        
+
         # Validate size bucket
         if self.size_bucket not in MULTIPLIERS:
             raise ValueError(f"Invalid size bucket. Must be one of: {', '.join(MULTIPLIERS.keys())}")
@@ -221,18 +221,35 @@ class JiraDataGenerator:
                 return response
                 
             except requests.exceptions.RequestException as e:
-                self.logger.error(f"API call failed (attempt {attempt + 1}/{max_retries}): {e}")
-                # Log response body for 4xx errors to help debug
+                # Check if this is an "already exists" error (expected when re-running)
+                is_already_exists = False
                 if hasattr(e, 'response') and e.response is not None:
                     try:
-                        error_detail = e.response.text
-                        self.logger.error(f"Response body: {error_detail}")
+                        error_text = e.response.text.lower()
+                        is_already_exists = 'already exists' in error_text or 'already a member' in error_text
                     except Exception:
                         pass
+
+                if is_already_exists:
+                    # Log at debug level - this is expected behavior when re-running
+                    self.logger.debug(f"Item already exists: {endpoint}")
+                else:
+                    self.logger.error(f"API call failed (attempt {attempt + 1}/{max_retries}): {e}")
+                    # Log response body for errors to help debug
+                    if hasattr(e, 'response') and e.response is not None:
+                        try:
+                            error_detail = e.response.text
+                            self.logger.error(f"Response body: {error_detail}")
+                        except Exception:
+                            pass
+
+                # Don't retry on client errors (4xx) - they won't succeed
+                if hasattr(e, 'response') and e.response is not None and e.response.status_code < 500:
+                    return None
                 if attempt < max_retries - 1:
                     time.sleep(2 ** attempt)  # Exponential backoff
                 else:
-                    raise
+                    return None  # Return None instead of raising
         
         return None
 
@@ -320,8 +337,16 @@ class JiraDataGenerator:
 
                         if response.status >= 400:
                             error_text = await response.text()
-                            self.logger.error(f"API call failed ({response.status}): {endpoint}")
-                            self.logger.error(f"Response: {error_text}")
+                            # Check if this is an "already exists" error (expected when re-running)
+                            is_already_exists = 'already exists' in error_text.lower() or 'already a member' in error_text.lower()
+                            if is_already_exists:
+                                self.logger.debug(f"Item already exists: {endpoint}")
+                            else:
+                                self.logger.error(f"API call failed ({response.status}): {endpoint}")
+                                self.logger.error(f"Response: {error_text}")
+                            # Don't retry on client errors (4xx) except 429 (rate limit)
+                            if response.status < 500:
+                                return (False, None)
                             if attempt < max_retries - 1:
                                 await asyncio.sleep(2 ** attempt)
                                 continue
@@ -373,7 +398,7 @@ class JiraDataGenerator:
         return ' '.join(random.choices(words, k=num_words)).capitalize()
     
     def create_issues_bulk(self, count: int) -> List[str]:
-        """Create issues in bulk batches"""
+        """Create issues in bulk batches."""
         self.logger.info(f"Creating {count} issues in batches of {self.BULK_CREATE_LIMIT}...")
 
         # Fetch project ID - bulk API requires ID, not key
@@ -418,7 +443,7 @@ class JiraDataGenerator:
                     }
                 }
                 issues_data["issueUpdates"].append(issue_data)
-            
+
             if self.dry_run:
                 self.logger.info(f"DRY RUN: Would create batch of {batch_size} issues")
                 # Generate fake keys for dry run
@@ -427,7 +452,7 @@ class JiraDataGenerator:
             else:
                 self.logger.debug(f"Bulk create payload: {issues_data}")
                 response = self._api_call('POST', 'issue/bulk', data=issues_data)
-                
+
                 if response:
                     result = response.json()
                     created = result.get('issues', [])
@@ -436,14 +461,204 @@ class JiraDataGenerator:
                         if key:
                             issue_keys.append(key)
                             self.logger.info(f"Created issue: {key}")
-            
+
             # Small delay between batches to be nice
             if batch_start + batch_size < count:
                 time.sleep(0.5)
-        
+
         self.created_issues = issue_keys
         return issue_keys
     
+    def generate_random_file(self, min_size_kb: int = 1, max_size_kb: int = 100) -> Tuple[bytes, str]:
+        """Generate random file content with a random size.
+
+        Returns (content_bytes, filename)
+        """
+        # Random size between min and max KB
+        size_bytes = random.randint(min_size_kb * 1024, max_size_kb * 1024)
+
+        # Choose a random file type
+        file_types = [
+            ('txt', 'text/plain'),
+            ('json', 'application/json'),
+            ('csv', 'text/csv'),
+            ('log', 'text/plain'),
+        ]
+        ext, _ = random.choice(file_types)
+
+        # Generate random content
+        if ext == 'json':
+            # Generate fake JSON
+            data = {
+                'id': random.randint(1, 10000),
+                'name': self.generate_random_text(2, 5),
+                'description': self.generate_random_text(10, 30),
+                'values': [random.randint(1, 100) for _ in range(10)],
+                'metadata': {
+                    'created': datetime.now().isoformat(),
+                    'prefix': self.prefix
+                }
+            }
+            content = json.dumps(data, indent=2).encode('utf-8')
+            # Pad to desired size
+            if len(content) < size_bytes:
+                padding = ''.join(random.choices(string.ascii_letters + string.digits, k=size_bytes - len(content)))
+                content = content[:-1] + f', "padding": "{padding}"}}'.encode('utf-8')
+        elif ext == 'csv':
+            # Generate fake CSV
+            lines = ['id,name,value,timestamp']
+            while len('\n'.join(lines).encode('utf-8')) < size_bytes:
+                lines.append(f'{random.randint(1,10000)},{self.generate_random_text(1,3)},{random.randint(1,1000)},{datetime.now().isoformat()}')
+            content = '\n'.join(lines).encode('utf-8')
+        else:
+            # Plain text - just random words
+            words = []
+            while len(' '.join(words).encode('utf-8')) < size_bytes:
+                words.append(self.generate_random_text(5, 20))
+            content = ' '.join(words).encode('utf-8')
+
+        # Trim to exact size
+        content = content[:size_bytes]
+
+        filename = f"{self.prefix}_attachment_{random.randint(1000, 9999)}.{ext}"
+        return content, filename
+
+    def add_attachment(self, issue_key: str, content: bytes, filename: str) -> bool:
+        """Add an attachment to an issue.
+
+        The attachment API requires multipart form data, not JSON.
+        """
+        if self.dry_run:
+            self.logger.debug(f"DRY RUN: Would attach {filename} ({len(content)} bytes) to {issue_key}")
+            return True
+
+        url = f"{self.jira_url}/rest/api/3/issue/{issue_key}/attachments"
+
+        try:
+            response = self.session.post(
+                url,
+                files={'file': (filename, content)},
+                headers={'X-Atlassian-Token': 'no-check'},  # Required for attachment API
+                auth=(self.email, self.api_token),
+                timeout=60
+            )
+
+            if response.status_code == 429:
+                retry_after = float(response.headers.get('Retry-After', 30))
+                self.logger.warning(f"Rate limited. Waiting {retry_after}s...")
+                time.sleep(retry_after)
+                return self.add_attachment(issue_key, content, filename)
+
+            response.raise_for_status()
+            return True
+
+        except requests.exceptions.RequestException as e:
+            # Check for "already exists" type errors
+            is_expected = False
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_text = e.response.text.lower()
+                    is_expected = 'already exists' in error_text
+                except Exception:
+                    pass
+
+            if is_expected:
+                self.logger.debug(f"Attachment already exists: {filename}")
+            else:
+                self.logger.error(f"Failed to attach {filename} to {issue_key}: {e}")
+            return False
+
+    def create_attachments(self, issue_keys: List[str], count: int):
+        """Create attachments on issues"""
+        self.logger.info(f"Creating {count} attachments...")
+
+        created = 0
+        failed = 0
+        for _ in range(count):
+            issue_key = random.choice(issue_keys)
+            content, filename = self.generate_random_file(min_size_kb=1, max_size_kb=500)
+
+            if self.add_attachment(issue_key, content, filename):
+                created += 1
+            else:
+                failed += 1
+
+            if (created + failed) % 10 == 0:
+                self.logger.info(f"Created {created}/{count} attachments ({failed} failed)")
+                time.sleep(0.2)
+
+        self.logger.info(f"Attachments complete: {created} added, {failed} failed")
+        return created
+
+    async def add_attachment_async(self, issue_key: str, content: bytes, filename: str) -> bool:
+        """Add an attachment to an issue asynchronously."""
+        if self.dry_run:
+            self.logger.debug(f"DRY RUN: Would attach {filename} ({len(content)} bytes) to {issue_key}")
+            return True
+
+        url = f"{self.jira_url}/rest/api/3/issue/{issue_key}/attachments"
+
+        # Need a separate session for attachments - the main session has JSON content-type
+        auth = aiohttp.BasicAuth(self.email, self.api_token)
+
+        async with self._semaphore:
+            try:
+                # Create multipart form data
+                data = aiohttp.FormData()
+                data.add_field('file', content, filename=filename, content_type='application/octet-stream')
+
+                async with aiohttp.ClientSession(auth=auth) as attachment_session:
+                    async with attachment_session.post(
+                        url,
+                        data=data,
+                        headers={'X-Atlassian-Token': 'no-check'},
+                        timeout=aiohttp.ClientTimeout(total=60)
+                    ) as response:
+                        if response.status == 429:
+                            retry_after = float(response.headers.get('Retry-After', 30))
+                            self.logger.warning(f"Rate limited. Waiting {retry_after}s...")
+                            await asyncio.sleep(retry_after)
+                            return await self.add_attachment_async(issue_key, content, filename)
+
+                        if response.status >= 400:
+                            error_text = await response.text()
+                            if 'already exists' not in error_text.lower():
+                                self.logger.error(f"Failed to attach {filename} to {issue_key}: {response.status}")
+                            return False
+
+                        return True
+
+            except aiohttp.ClientError as e:
+                self.logger.error(f"Failed to attach {filename} to {issue_key}: {e}")
+                return False
+
+    async def create_attachments_async(self, issue_keys: List[str], count: int) -> int:
+        """Create attachments on issues concurrently"""
+        self.logger.info(f"Creating {count} attachments (concurrency: {self.concurrency})...")
+
+        # Pre-generate all attachment data and tasks
+        tasks = []
+        for _ in range(count):
+            issue_key = random.choice(issue_keys)
+            content, filename = self.generate_random_file(min_size_kb=1, max_size_kb=500)
+            tasks.append(self.add_attachment_async(issue_key, content, filename))
+
+        # Execute with progress tracking
+        created = 0
+        failed = 0
+        for i in range(0, len(tasks), self.concurrency * 2):
+            batch = tasks[i:i + self.concurrency * 2]
+            results = await asyncio.gather(*batch, return_exceptions=True)
+            for result in results:
+                if result is True:
+                    created += 1
+                else:
+                    failed += 1
+            self.logger.info(f"Created {created}/{count} attachments ({failed} failed)")
+
+        self.logger.info(f"Attachments complete: {created} added, {failed} failed")
+        return created
+
     def create_comments(self, issue_keys: List[str], count: int):
         """Create comments on issues"""
         self.logger.info(f"Creating {count} comments...")
@@ -694,79 +909,89 @@ class JiraDataGenerator:
 
         return created
 
-    def add_watchers(self, issue_keys: List[str], count: int):
-        """Add watchers to issues"""
+    def add_watchers(self, issue_keys: List[str], count: int, project_keys: List[str]):
+        """Add watchers to issues using users from the Jira instance"""
         self.logger.info(f"Adding {count} watchers...")
 
-        # Get current user as the watcher
-        if self.dry_run:
-            current_user_account_id = "dry-run-account-id"
-        else:
-            response = self._api_call('GET', 'myself')
-            if not response:
-                self.logger.warning("Could not get current user")
-                return
+        # Fetch users from Jira to use as watchers
+        watcher_ids = self.get_all_users(max_users=100)
 
-            current_user_account_id = response.json().get('accountId')
-            if not current_user_account_id:
-                self.logger.warning("Could not get account ID")
-                return
-        
-        # Distribute watchers across issues
-        watches_per_issue = {}
+        if not watcher_ids:
+            self.logger.warning("No users found in Jira instance, skipping watchers")
+            return
+
+        # Warn if requested watchers exceeds available users
+        if count > len(watcher_ids):
+            self.logger.warning(
+                f"Requested {count} watchers but only {len(watcher_ids)} users available in Jira. "
+                f"Some users will be added as watchers to multiple issues."
+            )
+
+        # Add users to all projects so they can view issues
+        for project_key in project_keys:
+            self.add_users_to_project(project_key, watcher_ids)
+
+        created = 0
+        failed = 0
         for _ in range(count):
             issue_key = random.choice(issue_keys)
-            watches_per_issue[issue_key] = True  # One watcher (current user) per issue
-        
-        created = 0
-        for issue_key in watches_per_issue.keys():
-            # Add current user as watcher
-            self._api_call('POST', f'issue/{issue_key}/watchers', data=current_user_account_id)
-            created += 1
-            
-            if created % 10 == 0:
-                self.logger.info(f"Added {created}/{len(watches_per_issue)} watchers")
+            watcher_id = random.choice(watcher_ids)
+
+            response = self._api_call('POST', f'issue/{issue_key}/watchers', data=watcher_id)
+            if response is not None:
+                created += 1
+            else:
+                failed += 1
+
+            if (created + failed) % 10 == 0:
+                self.logger.info(f"Added {created}/{count} watchers ({failed} failed)")
                 time.sleep(0.2)
 
-    async def add_watchers_async(self, issue_keys: List[str], count: int) -> int:
-        """Add watchers to issues concurrently"""
+        self.logger.info(f"Watchers complete: {created} added, {failed} failed")
+
+    async def add_watchers_async(self, issue_keys: List[str], count: int, project_keys: List[str]) -> int:
+        """Add watchers to issues concurrently using users from the Jira instance"""
         self.logger.info(f"Adding {count} watchers (concurrency: {self.concurrency})...")
 
-        # Get current user as the watcher
-        if self.dry_run:
-            current_user_account_id = "dry-run-account-id"
-        else:
-            response = self._api_call('GET', 'myself')
-            if not response:
-                self.logger.warning("Could not get current user")
-                return 0
+        # Fetch users from Jira to use as watchers
+        watcher_ids = self.get_all_users(max_users=100)
 
-            current_user_account_id = response.json().get('accountId')
-            if not current_user_account_id:
-                self.logger.warning("Could not get account ID")
-                return 0
+        if not watcher_ids:
+            self.logger.warning("No users found in Jira instance, skipping watchers")
+            return 0
 
-        # Distribute watchers across issues (unique issues only)
-        watches_per_issue = set()
+        # Warn if requested watchers exceeds available users
+        if count > len(watcher_ids):
+            self.logger.warning(
+                f"Requested {count} watchers but only {len(watcher_ids)} users available in Jira. "
+                f"Some users will be added as watchers to multiple issues."
+            )
+
+        # Add users to all projects so they can view issues
+        for project_key in project_keys:
+            self.add_users_to_project(project_key, watcher_ids)
+
+        # Pre-generate all watcher tasks - randomly assign watchers to issues
+        tasks = []
         for _ in range(count):
             issue_key = random.choice(issue_keys)
-            watches_per_issue.add(issue_key)
-
-        # Pre-generate all watcher tasks
-        tasks = []
-        for issue_key in watches_per_issue:
-            tasks.append(self._api_call_async('POST', f'issue/{issue_key}/watchers', data=current_user_account_id))
+            watcher_id = random.choice(watcher_ids)
+            tasks.append(self._api_call_async('POST', f'issue/{issue_key}/watchers', data=watcher_id))
 
         # Execute with progress tracking
         created = 0
+        failed = 0
         for i in range(0, len(tasks), self.concurrency * 2):
             batch = tasks[i:i + self.concurrency * 2]
             results = await asyncio.gather(*batch, return_exceptions=True)
             for result in results:
                 if isinstance(result, tuple) and result[0]:
                     created += 1
-            self.logger.info(f"Added {created}/{len(watches_per_issue)} watchers")
+                else:
+                    failed += 1
+            self.logger.info(f"Added {created}/{count} watchers ({failed} failed)")
 
+        self.logger.info(f"Watchers complete: {created} added, {failed} failed")
         return created
 
     def create_versions(self, count: int):
@@ -808,23 +1033,121 @@ class JiraDataGenerator:
             
             time.sleep(0.2)
 
+    def get_project_admin_role_id(self, project_key: str) -> Optional[str]:
+        """Get the Administrator role ID for a project"""
+        if self.dry_run:
+            return "10002"  # Common default for Administrator role
+
+        response = self._api_call('GET', f'project/{project_key}/role')
+        if response:
+            roles = response.json()
+            # Look for Administrator role in the response
+            for role_name, role_url in roles.items():
+                if 'administrator' in role_name.lower():
+                    # Extract role ID from URL (e.g., .../role/10002)
+                    role_id = role_url.rstrip('/').split('/')[-1]
+                    return role_id
+        return None
+
+    def add_user_to_project_role(self, project_key: str, role_id: str, account_id: str) -> bool:
+        """Add a user to a project role"""
+        if self.dry_run:
+            self.logger.info(f"DRY RUN: Would add user to role in {project_key}")
+            return True
+
+        data = {
+            "user": [account_id]
+        }
+
+        response = self._api_call('POST', f'project/{project_key}/role/{role_id}', data=data)
+        if response:
+            self.logger.debug(f"Added user to role in {project_key}")
+            return True
+        else:
+            self.logger.debug(f"Failed to add user to role in {project_key} (may already exist)")
+            return False
+
+    def get_project_viewer_role_id(self, project_key: str) -> Optional[str]:
+        """Get a role ID that grants view permission. Falls back to Administrators if no other role exists."""
+        if self.dry_run:
+            return "10002"  # Common default for Administrators role
+
+        response = self._api_call('GET', f'project/{project_key}/role')
+        if response:
+            roles = response.json()
+
+            # System roles that cannot be modified
+            system_roles = ['atlassian-addons', 'system', 'service']
+
+            def is_system_role(name):
+                return any(sr in name.lower() for sr in system_roles)
+
+            # Look for a role that grants view access - try common names first
+            for role_name in ['Users', 'Viewers', 'Developers', 'Member', 'Team']:
+                for name, role_url in roles.items():
+                    if role_name.lower() in name.lower() and not is_system_role(name):
+                        role_id = role_url.rstrip('/').split('/')[-1]
+                        self.logger.debug(f"Found viewer role: {name} (ID: {role_id})")
+                        return role_id
+
+            # Fall back to Administrators role if no other suitable role found
+            for name, role_url in roles.items():
+                if 'admin' in name.lower() and not is_system_role(name):
+                    role_id = role_url.rstrip('/').split('/')[-1]
+                    self.logger.debug(f"Using Administrators role for viewers: {name} (ID: {role_id})")
+                    return role_id
+
+            self.logger.warning(f"No suitable role found in project {project_key}. Available roles: {list(roles.keys())}")
+        return None
+
+    def add_users_to_project(self, project_key: str, user_account_ids: List[str]) -> int:
+        """Add multiple users to a project so they can view issues"""
+        if not user_account_ids:
+            return 0
+
+        role_id = self.get_project_viewer_role_id(project_key)
+        if not role_id:
+            self.logger.warning(f"Could not find viewer role for project {project_key}")
+            return 0
+
+        self.logger.info(f"Adding {len(user_account_ids)} users to project {project_key}...")
+
+        if self.dry_run:
+            self.logger.info(f"DRY RUN: Would add {len(user_account_ids)} users to project")
+            return len(user_account_ids)
+
+        added = 0
+        for account_id in user_account_ids:
+            if self.add_user_to_project_role(project_key, role_id, account_id):
+                added += 1
+
+        self.logger.info(f"Added {added}/{len(user_account_ids)} users to project {project_key}")
+        return added
+
+    def get_project(self, project_key: str) -> Optional[Dict[str, str]]:
+        """Fetch a project's info by key"""
+        response = self._api_call('GET', f'project/{project_key}')
+        if response:
+            result = response.json()
+            return {
+                "key": result.get('key'),
+                "id": result.get('id')
+            }
+        return None
+
     def create_projects(self, count: int) -> List[Dict[str, str]]:
-        """Create projects and return list of project info dicts with 'key' and 'id'"""
+        """Create projects and return list of project info dicts with 'key' and 'id'.
+
+        If a project already exists with our prefix, reuse it instead of failing.
+        """
         self.logger.info(f"Creating {count} projects...")
 
         created_projects = []
+        current_user_id = self.get_current_user_account_id()
 
         for i in range(count):
             # Generate a unique project key (max 10 chars, uppercase)
             project_key = f"{self.prefix[:6].upper()}{i + 1}"
-
-            project_data = {
-                "key": project_key,
-                "name": f"{self.prefix} Test Project {i + 1}",
-                "description": f"Test project created by data generator. {self.generate_random_text(5, 15)}",
-                "projectTypeKey": "software",
-                "leadAccountId": self.get_current_user_account_id()
-            }
 
             if self.dry_run:
                 self.logger.info(f"DRY RUN: Would create project {project_key}")
@@ -832,15 +1155,40 @@ class JiraDataGenerator:
                     "key": project_key,
                     "id": f"1000{i}"
                 })
+                # Also simulate adding admin role
+                self.get_project_admin_role_id(project_key)
+                self.add_user_to_project_role(project_key, "10002", current_user_id)
+                time.sleep(0.3)
+                continue
+
+            # Try to create project
+            project_data = {
+                "key": project_key,
+                "name": f"{self.prefix} Test Project {i + 1}",
+                "description": f"Test project created by data generator. {self.generate_random_text(5, 15)}",
+                "projectTypeKey": "software",
+                "leadAccountId": current_user_id
+            }
+
+            response = self._api_call('POST', 'project', data=project_data)
+            if response:
+                result = response.json()
+                created_projects.append({
+                    "key": result.get('key'),
+                    "id": result.get('id')
+                })
+                self.logger.info(f"Created project {i + 1}/{count}: {result.get('key')}")
+
+                # Add current user to Administrator role for watchers permission
+                admin_role_id = self.get_project_admin_role_id(result.get('key'))
+                if admin_role_id and current_user_id:
+                    self.add_user_to_project_role(result.get('key'), admin_role_id, current_user_id)
             else:
-                response = self._api_call('POST', 'project', data=project_data)
-                if response:
-                    result = response.json()
-                    created_projects.append({
-                        "key": result.get('key'),
-                        "id": result.get('id')
-                    })
-                    self.logger.info(f"Created project {i + 1}/{count}: {result.get('key')}")
+                # Creation failed - try to fetch existing project (may already exist)
+                existing_project = self.get_project(project_key)
+                if existing_project:
+                    self.logger.info(f"Project {project_key} already exists, reusing it")
+                    created_projects.append(existing_project)
                 else:
                     self.logger.warning(f"Failed to create project {project_key}")
 
@@ -857,6 +1205,51 @@ class JiraDataGenerator:
         if response:
             return response.json().get('accountId')
         return None
+
+    def get_all_users(self, max_users: int = 100) -> List[str]:
+        """Fetch users from the Jira instance to use as watchers.
+
+        Returns a list of account IDs.
+        """
+        if self.dry_run:
+            return [f"dry-run-user-{i}" for i in range(1, 6)]
+
+        self.logger.info("Fetching users from Jira instance...")
+
+        users = []
+        start_at = 0
+
+        while len(users) < max_users:
+            # Use users/search endpoint which returns assignable users
+            response = self._api_call(
+                'GET',
+                'users/search',
+                params={
+                    'startAt': start_at,
+                    'maxResults': 50
+                }
+            )
+
+            if not response:
+                break
+
+            batch = response.json()
+            if not batch:
+                break
+
+            for user in batch:
+                account_id = user.get('accountId')
+                # Filter out inactive users and app users
+                if account_id and user.get('active', True) and user.get('accountType') == 'atlassian':
+                    users.append(account_id)
+
+            if len(batch) < 50:
+                break
+
+            start_at += 50
+
+        self.logger.info(f"Found {len(users)} users to use as watchers")
+        return users[:max_users]
 
     def generate_all(self, num_issues: int):
         """Generate all test data based on multipliers"""
@@ -933,7 +1326,11 @@ class JiraDataGenerator:
             self.create_issue_links(all_issue_keys, counts['issue_link'])
 
         if counts.get('issue_watcher', 0) > 0:
-            self.add_watchers(all_issue_keys, counts['issue_watcher'])
+            project_keys = [p['key'] for p in projects]
+            self.add_watchers(all_issue_keys, counts['issue_watcher'], project_keys)
+
+        if counts.get('issue_attachment', 0) > 0:
+            self.create_attachments(all_issue_keys, counts['issue_attachment'])
 
         self.logger.info(f"\n" + "=" * 60)
         self.logger.info(f"Data generation complete!")
@@ -1025,7 +1422,11 @@ class JiraDataGenerator:
                 await self.create_issue_links_async(all_issue_keys, counts['issue_link'])
 
             if counts.get('issue_watcher', 0) > 0:
-                await self.add_watchers_async(all_issue_keys, counts['issue_watcher'])
+                project_keys = [p['key'] for p in projects]
+                await self.add_watchers_async(all_issue_keys, counts['issue_watcher'], project_keys)
+
+            if counts.get('issue_attachment', 0) > 0:
+                await self.create_attachments_async(all_issue_keys, counts['issue_attachment'])
 
         finally:
             await self._close_async_session()
@@ -1103,13 +1504,31 @@ JQL Search:
 
     args = parser.parse_args()
 
-    # Setup logging
+    # Generate log filename based on prefix and timestamp
+    log_filename = f"jira_generator_{args.prefix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
+    # Setup logging - output to both console and file
     log_level = logging.DEBUG if args.verbose else logging.INFO
-    logging.basicConfig(
-        level=log_level,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+    log_format = '%(asctime)s - %(levelname)s - %(message)s'
+    date_format = '%Y-%m-%d %H:%M:%S'
+
+    # Create root logger
+    logger = logging.getLogger()
+    logger.setLevel(log_level)
+
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(log_level)
+    console_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
+    logger.addHandler(console_handler)
+
+    # File handler
+    file_handler = logging.FileHandler(log_filename)
+    file_handler.setLevel(log_level)
+    file_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
+    logger.addHandler(file_handler)
+
+    logging.info(f"Logging to file: {log_filename}")
 
     # Load environment variables from .env file
     load_dotenv()
