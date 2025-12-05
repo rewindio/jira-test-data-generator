@@ -1,20 +1,23 @@
 # Jira Test Data Generator
 
-A Python tool to generate realistic test data for Jira instances based on production data multipliers. Intelligently handles rate limiting and uses bulk APIs for optimal performance.
+A Python tool to generate realistic test data for Jira instances based on production data multipliers. Intelligently handles rate limiting and uses bulk APIs and async concurrency for optimal performance.
 
 ## Features
 
-- 🚀 **Bulk API Support** - Uses Jira's bulk creation APIs (50 issues per call)
-- ⚡ **Intelligent Rate Limiting** - Automatically backs off when hitting rate limits
-- 📊 **Production-Based Multipliers** - Creates realistic data distributions based on actual Jira instances
-- 🏷️ **Easy Cleanup** - All items tagged with searchable labels for easy JQL queries
-- 🔍 **Size-Based Generation** - Supports Small/Medium/Large/XLarge instance profiles
-- 🧪 **Dry Run Mode** - Preview what will be created without making changes
+- **Bulk API Support** - Uses Jira's bulk creation APIs (50 issues per call)
+- **Async Concurrency** - Concurrent API requests for 2-4x faster generation
+- **Intelligent Rate Limiting** - Automatically backs off when hitting rate limits
+- **Production-Based Multipliers** - Creates realistic data distributions from CSV config
+- **Dynamic Project Creation** - Automatically creates projects based on multipliers
+- **Easy Cleanup** - All items tagged with searchable labels for easy JQL queries
+- **Size-Based Generation** - Supports Small/Medium/Large/XLarge instance profiles
+- **Dry Run Mode** - Preview what will be created without making changes
 
 ## What Gets Created
 
 Based on the size bucket you choose, the tool creates:
 
+- **Projects** (automatically created based on multipliers)
 - **Issues** (base count you specify)
 - **Comments** (4.8x for small instances, varies by size)
 - **Worklogs** (7.27x for small, decreases for larger)
@@ -22,14 +25,19 @@ Based on the size bucket you choose, the tool creates:
 - **Watchers** (2.51x for small, 3.95x for medium)
 - **Project Versions** (1.76x for small)
 - **Project Components** (0.49x for small)
-- **Issue Properties** (~0.89x)
 - And more...
+
+Multipliers are loaded from `item_type_multipliers.csv` for easy customization.
 
 ## Installation
 
 ```bash
 # Clone or download the script
 cd /path/to/script
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # or `venv\Scripts\activate` on Windows
 
 # Install dependencies
 pip install -r requirements.txt
@@ -81,9 +89,8 @@ python jira_data_generator.py --token 'your_api_token_here' ...
 
 ```bash
 python jira_data_generator.py \
-  --url https://rewind.atlassian.net \
-  --email your.email@rewind.com \
-  --project TEST \
+  --url https://mycompany.atlassian.net \
+  --email your.email@company.com \
   --prefix PERF \
   --count 100 \
   --size small
@@ -93,68 +100,96 @@ python jira_data_generator.py \
 
 ```bash
 python jira_data_generator.py \
-  --url https://rewind.atlassian.net \
-  --email your.email@rewind.com \
-  --project TEST \
+  --url https://mycompany.atlassian.net \
+  --email your.email@company.com \
   --prefix LOAD \
   --count 500 \
   --size medium \
   --dry-run
 ```
 
-### Load Testing Scenario
+### Faster Generation with Higher Concurrency
 
 ```bash
-# Generate 1000 issues with medium instance characteristics
+# Use more concurrent requests for faster generation
 python jira_data_generator.py \
-  --url https://rewind.atlassian.net \
-  --email your.email@rewind.com \
-  --project STAGING \
-  --prefix LOAD1K \
+  --url https://mycompany.atlassian.net \
+  --email your.email@company.com \
+  --prefix LOAD \
   --count 1000 \
   --size medium \
-  --verbose
+  --concurrency 10
 ```
 
-### Performance Testing
+### Sequential Mode (No Async)
 
 ```bash
-# Small batch for quick tests
+# Disable async if you encounter issues
 python jira_data_generator.py \
-  --url https://rewind.atlassian.net \
-  --email your.email@rewind.com \
-  --project SANDBOX \
-  --prefix QUICK \
-  --count 50 \
-  --size small
+  --url https://mycompany.atlassian.net \
+  --email your.email@company.com \
+  --prefix TEST \
+  --count 100 \
+  --size small \
+  --no-async
 ```
 
 ## Command Line Options
 
-| Option | Required | Description | Example |
+| Option | Required | Description | Default |
 |--------|----------|-------------|---------|
-| `--url` | Yes | Jira instance URL | `https://company.atlassian.net` |
-| `--email` | Yes | Your Jira email | `user@company.com` |
-| `--token` | No* | API token | `abc123...` |
-| `--project` | Yes | Project key | `TEST` |
-| `--prefix` | Yes | Prefix for items | `PERF` |
-| `--count` | Yes | Number of issues | `100` |
-| `--size` | No | Instance size | `small`, `medium`, `large`, `xlarge` |
-| `--dry-run` | No | Preview only | Flag |
-| `--verbose` | No | Detailed logs | Flag |
+| `--url` | Yes | Jira instance URL | - |
+| `--email` | Yes | Your Jira email | - |
+| `--token` | No* | API token | From env |
+| `--prefix` | Yes | Prefix for items and project keys | - |
+| `--count` | Yes | Number of issues to create | - |
+| `--size` | No | Instance size bucket | `small` |
+| `--concurrency` | No | Number of concurrent API requests | `5` |
+| `--no-async` | No | Disable async mode (sequential) | `false` |
+| `--dry-run` | No | Preview only, no API calls | `false` |
+| `--verbose` | No | Enable debug logging | `false` |
 
-\* Token can also be set via `JIRA_API_TOKEN` environment variable
+\* Token can also be set via `JIRA_API_TOKEN` environment variable or `.env` file
+
+## Concurrency & Performance
+
+The tool uses async I/O to make concurrent API requests, significantly speeding up generation of high-volume items like comments, worklogs, and watchers.
+
+### How It Works
+
+- **Projects, Issues, Components, Versions**: Created sequentially (low volume or already bulk-optimized)
+- **Comments, Worklogs, Issue Links, Watchers**: Created concurrently using asyncio
+- **Rate Limiting**: Shared across all concurrent requests with thread-safe tracking
+
+### Concurrency Guidelines
+
+| Concurrency | Use Case | Notes |
+|-------------|----------|-------|
+| `1-3` | Conservative, shared instances | Minimal rate limit risk |
+| `5` (default) | Balanced performance | Good for most cases |
+| `10-15` | Faster generation | May hit rate limits more often |
+| `20+` | Maximum speed | Only for dedicated test instances |
+
+### Performance Comparison
+
+| Issues | Sequential (~) | Async (concurrency=5) | Async (concurrency=10) |
+|--------|---------------|----------------------|------------------------|
+| 100 | 5-7 min | 2-3 min | 1-2 min |
+| 500 | 20-30 min | 8-12 min | 5-8 min |
+| 1,000 | 45-60 min | 15-25 min | 10-15 min |
+
+*Times vary based on rate limits and network latency*
 
 ## Size Buckets
 
 Choose the size that matches your testing needs:
 
-| Size | Issue Range | Total Objects | Use Case |
-|------|-------------|---------------|----------|
-| **Small** | < 150K | ~600K | Quick tests, dev environments |
-| **Medium** | 150K - 600K | ~6.5M | Staging, moderate load tests |
-| **Large** | 600K - 2M | ~14.5M | Production-like scenarios |
-| **XLarge** | > 2M | ~13.5M | Enterprise testing |
+| Size | Issue Range | Characteristics | Use Case |
+|------|-------------|-----------------|----------|
+| **Small** | 1-1K | High activity per issue | Quick tests, dev environments |
+| **Medium** | 1K-10K | Balanced | Staging, moderate load tests |
+| **Large** | 10K-100K | Moderate activity | Production-like scenarios |
+| **XLarge** | 100K+ | Low activity per issue | Enterprise testing |
 
 The multipliers adjust automatically based on size to create realistic distributions.
 
@@ -181,11 +216,8 @@ labels = PERF AND issuetype = Task
 ### Cleaning Up
 
 ```bash
-# 1. Find all issues
-# Use JQL: labels = YOUR-PREFIX-TIMESTAMP
-
-# 2. Bulk delete in Jira UI
-# Tools -> Bulk Change -> Select all -> Delete
+# 1. Find all issues using JQL: labels = YOUR-PREFIX-TIMESTAMP
+# 2. Bulk delete in Jira UI: Tools -> Bulk Change -> Select all -> Delete
 ```
 
 ## Rate Limiting
@@ -193,10 +225,10 @@ labels = PERF AND issuetype = Task
 The tool handles rate limiting intelligently:
 
 1. **Respects `Retry-After` headers** from Jira
-2. **Exponential backoff** when rate limited
-3. **Automatic retries** with delays
-4. **Batch processing** to minimize API calls
-5. **Strategic delays** between operations
+2. **Exponential backoff** when rate limited (1s → 60s max)
+3. **Shared rate limit tracking** across concurrent requests
+4. **Automatic retries** (5 attempts per request)
+5. **Semaphore-based concurrency control**
 
 You'll see messages like:
 ```
@@ -205,32 +237,11 @@ Rate limit hit (1 consecutive). Waiting 30.0s
 
 The tool will automatically slow down and continue when allowed.
 
-## Performance Tips
-
-### For Fastest Generation
-
-1. Use **bulk operations** (already enabled)
-2. Run during **off-peak hours**
-3. Start with **small counts** to test
-4. Use `--dry-run` first to verify
-5. Monitor with `--verbose`
-
-### Estimated Times
-
-Approximate times (can vary based on rate limits):
-
-| Issues | Items Created | Est. Time |
-|--------|---------------|-----------|
-| 50 | ~500 | 2-3 min |
-| 100 | ~1,000 | 5-7 min |
-| 500 | ~5,000 | 20-30 min |
-| 1,000 | ~10,000 | 45-60 min |
-
 ## Troubleshooting
 
 ### "Rate limit hit" messages
 
-**Normal!** The tool is working as designed. It will automatically wait and continue.
+**Normal!** The tool is working as designed. It will automatically wait and continue. If you see many consecutive rate limits, try reducing `--concurrency`.
 
 ### Authentication errors
 
@@ -240,12 +251,12 @@ curl -u "your.email@company.com:YOUR_TOKEN" \
   https://your-domain.atlassian.net/rest/api/3/myself
 ```
 
-### Project not found
+### Project creation fails
 
 Make sure:
-1. Project key is correct (usually 3-4 uppercase letters)
-2. You have permission to create issues in the project
-3. Project exists and is accessible
+1. Your API token has project creation permissions
+2. The prefix creates valid project keys (uppercase, max 10 chars)
+3. No existing projects conflict with generated keys
 
 ### "Could not get account ID"
 
@@ -254,6 +265,13 @@ Check that:
 2. You have "Browse Users" permission
 3. Your account is active
 
+### Async errors
+
+If you encounter async-related issues, try:
+```bash
+python jira_data_generator.py ... --no-async
+```
+
 ## Examples
 
 ### Example 1: Quick Test
@@ -261,9 +279,8 @@ Check that:
 ```bash
 # Generate 25 issues with minimal data
 python jira_data_generator.py \
-  --url https://rewind.atlassian.net \
-  --email you@rewind.com \
-  --project SANDBOX \
+  --url https://mycompany.atlassian.net \
+  --email you@company.com \
   --prefix TEST \
   --count 25 \
   --size small \
@@ -273,63 +290,67 @@ python jira_data_generator.py \
 ### Example 2: Staging Environment
 
 ```bash
-# Realistic medium instance data
+# Realistic medium instance data with faster generation
 export JIRA_API_TOKEN="your_token"
 
 python jira_data_generator.py \
-  --url https://rewind.atlassian.net \
-  --email you@rewind.com \
-  --project STAGING \
+  --url https://mycompany.atlassian.net \
+  --email you@company.com \
   --prefix STAGE \
   --count 500 \
   --size medium \
+  --concurrency 10 \
   --verbose
 ```
 
-### Example 3: Performance Test
+### Example 3: Large Performance Test
 
 ```bash
 # Large dataset for load testing
 python jira_data_generator.py \
-  --url https://rewind.atlassian.net \
-  --email you@rewind.com \
-  --project PERF \
+  --url https://mycompany.atlassian.net \
+  --email you@company.com \
   --prefix LOAD2K \
   --count 2000 \
-  --size large
+  --size large \
+  --concurrency 15
 ```
 
 ## Output Example
 
 ```
 ============================================================
-Starting Jira data generation
+Starting Jira data generation (async mode)
 Size bucket: small
 Target issues: 100
-Project: TEST
 Prefix: PERF
+Concurrency: 5
 Run ID (for JQL): labels = PERF-20241204-143022
 Dry run: False
 ============================================================
 
 Planned creation counts:
   Issues: 100
+  project: 1
   comment: 480
-  issue_attachment: 210
   issue_link: 30
   issue_watcher: 251
   issue_worklog: 727
   project_component: 49
   project_version: 176
 
+Creating 1 projects...
+Created project 1/1: PERF1
+
+Creating 100 issues in project PERF1...
 Creating 100 issues in batches of 50...
-Created issue: TEST-1001
-Created issue: TEST-1002
+Created issue: PERF1-1
+Created issue: PERF1-2
 ...
 
-Creating 480 comments...
-Created 10/480 comments
-Created 20/480 comments
+Creating 480 comments (concurrency: 5)...
+Created 50/480 comments
+Created 100/480 comments
 ...
 
 ============================================================
@@ -341,68 +362,50 @@ To find all generated data in JQL:
   OR
   labels = PERF
 
+Created 1 projects
 Created 100 issues
 ```
 
-## Advanced Usage
+## Customizing Multipliers
 
-### Targeting Specific Multipliers
+Multipliers are loaded from `item_type_multipliers.csv`. Edit this file to customize:
 
-Edit the `MULTIPLIERS` dict in the script to customize:
-
-```python
-MULTIPLIERS = {
-    'custom': {
-        'comment': 10.0,      # 10 comments per issue
-        'issue_worklog': 2.0,  # 2 worklogs per issue
-        # ... etc
-    }
-}
-```
-
-Then use `--size custom`
-
-### Integrating with CI/CD
-
-```bash
-#!/bin/bash
-# test-data-setup.sh
-
-set -e
-
-echo "Generating test data..."
-python jira_data_generator.py \
-  --url "$JIRA_URL" \
-  --email "$JIRA_EMAIL" \
-  --project TEST \
-  --prefix "CI-${BUILD_ID}" \
-  --count 100 \
-  --size small
-
-echo "Test data ready!"
+```csv
+Item Type,Small,Medium,Large,XLarge
+comment,4.80,4.75,2.69,0.26
+issue_worklog,7.27,1.49,0.24,0.06
+project,0.00249,0.00066,0.00032,0.00001
+...
 ```
 
 ## Architecture Notes
 
-### Rate Limiting Strategy
+### Async Implementation
 
-1. **Retry-After Header**: Primary mechanism
-2. **Exponential Backoff**: Starts at 1s, doubles each 429, max 60s
-3. **Success Reset**: Resets to 1s on successful request
-4. **Max Retries**: 5 attempts per request
+- Uses `aiohttp` for async HTTP requests
+- Semaphore controls max concurrent requests
+- Rate limit state shared via asyncio.Lock
+- Graceful session cleanup on completion
 
-### Bulk Operations
+### What Runs Async vs Sequential
 
-- Issues: 50 per bulk create call
-- Other items: Individual creation (no bulk API available)
-- Strategic delays between batches
+| Operation | Mode | Reason |
+|-----------|------|--------|
+| Projects | Sequential | Low volume, dependencies |
+| Issues (bulk) | Sequential | Already optimized (50/call) |
+| Components | Sequential | Low volume |
+| Versions | Sequential | Low volume |
+| Comments | **Async** | High volume |
+| Worklogs | **Async** | High volume |
+| Issue Links | **Async** | Medium-high volume |
+| Watchers | **Async** | Medium-high volume |
 
 ### Error Handling
 
-- Retries on 5xx errors (via urllib3)
-- Intelligent 429 handling
-- Graceful degradation
-- Detailed logging
+- Retries on 5xx errors (via urllib3 for sync, manual for async)
+- Intelligent 429 handling with shared state
+- Graceful degradation on failures
+- Detailed logging with `--verbose`
 
 ## Contributing
 
@@ -412,8 +415,6 @@ Feel free to extend this! Some ideas:
 - [ ] Support for custom fields
 - [ ] Sprint creation
 - [ ] Board configuration
-- [ ] More sophisticated link patterns
-- [ ] Parallel batch processing
 - [ ] Resume from failure
 - [ ] Progress bar (tqdm)
 

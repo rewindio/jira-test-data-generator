@@ -4,9 +4,11 @@ Jira Test Data Generator
 
 Generates realistic test data for Jira instances based on multipliers from production data.
 Handles rate limiting intelligently and uses bulk APIs for best performance.
+Supports concurrent API calls via asyncio for improved performance.
 """
 
 import argparse
+import asyncio
 import csv
 import json
 import logging
@@ -16,11 +18,12 @@ import random
 import string
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
 
+import aiohttp
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -72,11 +75,13 @@ MULTIPLIERS = load_multipliers_from_csv()
 
 @dataclass
 class RateLimitState:
-    """Tracks rate limiting state"""
+    """Tracks rate limiting state (shared across async tasks)"""
     retry_after: Optional[float] = None
     consecutive_429s: int = 0
     current_delay: float = 1.0
     max_delay: float = 60.0
+    # Lock for thread-safe updates in async context
+    _lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
 
 class JiraDataGenerator:
@@ -91,7 +96,8 @@ class JiraDataGenerator:
         api_token: str,
         prefix: str,
         size_bucket: str = 'small',
-        dry_run: bool = False
+        dry_run: bool = False,
+        concurrency: int = 5
     ):
         self.jira_url = jira_url.rstrip('/')
         self.email = email
@@ -99,13 +105,18 @@ class JiraDataGenerator:
         self.prefix = prefix
         self.size_bucket = size_bucket.lower()
         self.dry_run = dry_run
+        self.concurrency = concurrency
 
         # Project context (set dynamically when creating projects)
         self.project_key = None
-        
+
         self.rate_limit = RateLimitState()
         self.session = self._create_session()
         self.logger = logging.getLogger(__name__)
+
+        # Async session (created lazily)
+        self._async_session: Optional[aiohttp.ClientSession] = None
+        self._semaphore: Optional[asyncio.Semaphore] = None
         
         # Track created items for linking
         self.created_issues = []
@@ -224,6 +235,112 @@ class JiraDataGenerator:
                     raise
         
         return None
+
+    async def _get_async_session(self) -> aiohttp.ClientSession:
+        """Get or create async HTTP session"""
+        if self._async_session is None or self._async_session.closed:
+            auth = aiohttp.BasicAuth(self.email, self.api_token)
+            timeout = aiohttp.ClientTimeout(total=30)
+            self._async_session = aiohttp.ClientSession(
+                auth=auth,
+                timeout=timeout,
+                headers={
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            )
+        if self._semaphore is None:
+            self._semaphore = asyncio.Semaphore(self.concurrency)
+        return self._async_session
+
+    async def _close_async_session(self):
+        """Close async HTTP session"""
+        if self._async_session and not self._async_session.closed:
+            await self._async_session.close()
+
+    async def _handle_rate_limit_async(self, status: int, headers: dict) -> float:
+        """Handle rate limit responses in async context. Returns delay if rate limited."""
+        if status == 429:
+            async with self.rate_limit._lock:
+                self.rate_limit.consecutive_429s += 1
+
+                retry_after = headers.get('Retry-After')
+                if retry_after:
+                    try:
+                        delay = float(retry_after)
+                    except ValueError:
+                        delay = 60
+                else:
+                    self.rate_limit.current_delay = min(
+                        self.rate_limit.current_delay * 2,
+                        self.rate_limit.max_delay
+                    )
+                    delay = self.rate_limit.current_delay
+
+                self.logger.warning(
+                    f"Rate limit hit ({self.rate_limit.consecutive_429s} consecutive). "
+                    f"Waiting {delay:.1f}s"
+                )
+                return delay
+        elif status < 300:
+            async with self.rate_limit._lock:
+                self.rate_limit.consecutive_429s = 0
+                self.rate_limit.current_delay = 1.0
+        return 0
+
+    async def _api_call_async(
+        self,
+        method: str,
+        endpoint: str,
+        data: Optional[Dict] = None,
+        params: Optional[Dict] = None,
+        max_retries: int = 5
+    ) -> Tuple[bool, Optional[Dict]]:
+        """Make an async API call with rate limit handling.
+
+        Returns (success: bool, response_json: Optional[Dict])
+        """
+        url = f"{self.jira_url}/rest/api/3/{endpoint}"
+
+        if self.dry_run:
+            self.logger.debug(f"DRY RUN: {method} {endpoint}")
+            return (True, None)
+
+        session = await self._get_async_session()
+
+        async with self._semaphore:
+            for attempt in range(max_retries):
+                try:
+                    async with session.request(method, url, json=data, params=params) as response:
+                        delay = await self._handle_rate_limit_async(response.status, dict(response.headers))
+
+                        if response.status == 429:
+                            await asyncio.sleep(delay)
+                            continue
+
+                        if response.status >= 400:
+                            error_text = await response.text()
+                            self.logger.error(f"API call failed ({response.status}): {endpoint}")
+                            self.logger.error(f"Response: {error_text}")
+                            if attempt < max_retries - 1:
+                                await asyncio.sleep(2 ** attempt)
+                                continue
+                            return (False, None)
+
+                        if response.status == 204:
+                            return (True, None)
+
+                        result = await response.json()
+                        return (True, result)
+
+                except aiohttp.ClientError as e:
+                    self.logger.error(f"Async API call failed (attempt {attempt + 1}/{max_retries}): {e}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(2 ** attempt)
+                    else:
+                        return (False, None)
+
+        return (False, None)
 
     def get_project_id(self) -> Optional[str]:
         """Fetch and cache the project ID from the project key"""
@@ -363,7 +480,46 @@ class JiraDataGenerator:
                 if created % 10 == 0:
                     self.logger.info(f"Created {created}/{count} comments")
                     time.sleep(0.2)  # Small delay every 10 comments
-    
+
+    async def create_comments_async(self, issue_keys: List[str], count: int) -> int:
+        """Create comments on issues concurrently"""
+        self.logger.info(f"Creating {count} comments (concurrency: {self.concurrency})...")
+
+        # Pre-generate all comment tasks
+        tasks = []
+        for i in range(count):
+            issue_key = random.choice(issue_keys)
+            comment_data = {
+                "body": {
+                    "type": "doc",
+                    "version": 1,
+                    "content": [
+                        {
+                            "type": "paragraph",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": f"{self.prefix} comment: {self.generate_random_text(5, 15)}"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+            tasks.append(self._api_call_async('POST', f'issue/{issue_key}/comment', data=comment_data))
+
+        # Execute with progress tracking
+        created = 0
+        for i in range(0, len(tasks), self.concurrency * 2):
+            batch = tasks[i:i + self.concurrency * 2]
+            results = await asyncio.gather(*batch, return_exceptions=True)
+            for result in results:
+                if isinstance(result, tuple) and result[0]:
+                    created += 1
+            self.logger.info(f"Created {created}/{count} comments")
+
+        return created
+
     def create_worklogs(self, issue_keys: List[str], count: int):
         """Create worklogs on issues"""
         self.logger.info(f"Creating {count} worklogs...")
@@ -405,7 +561,50 @@ class JiraDataGenerator:
                 if created % 10 == 0:
                     self.logger.info(f"Created {created}/{count} worklogs")
                     time.sleep(0.2)
-    
+
+    async def create_worklogs_async(self, issue_keys: List[str], count: int) -> int:
+        """Create worklogs on issues concurrently"""
+        self.logger.info(f"Creating {count} worklogs (concurrency: {self.concurrency})...")
+
+        # Pre-generate all worklog tasks
+        tasks = []
+        for i in range(count):
+            issue_key = random.choice(issue_keys)
+            time_spent_seconds = random.randint(1800, 28800)
+
+            worklog_data = {
+                "timeSpentSeconds": time_spent_seconds,
+                "comment": {
+                    "type": "doc",
+                    "version": 1,
+                    "content": [
+                        {
+                            "type": "paragraph",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": f"{self.prefix} work: {self.generate_random_text(3, 10)}"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "started": (datetime.now() - timedelta(days=random.randint(0, 30))).strftime('%Y-%m-%dT%H:%M:%S.000+0000')
+            }
+            tasks.append(self._api_call_async('POST', f'issue/{issue_key}/worklog', data=worklog_data))
+
+        # Execute with progress tracking
+        created = 0
+        for i in range(0, len(tasks), self.concurrency * 2):
+            batch = tasks[i:i + self.concurrency * 2]
+            results = await asyncio.gather(*batch, return_exceptions=True)
+            for result in results:
+                if isinstance(result, tuple) and result[0]:
+                    created += 1
+            self.logger.info(f"Created {created}/{count} worklogs")
+
+        return created
+
     def create_issue_links(self, issue_keys: List[str], count: int):
         """Create issue links"""
         self.logger.info(f"Creating {count} issue links...")
@@ -447,7 +646,54 @@ class JiraDataGenerator:
             if created % 10 == 0:
                 self.logger.info(f"Created {created}/{count} issue links")
                 time.sleep(0.2)
-    
+
+    async def create_issue_links_async(self, issue_keys: List[str], count: int) -> int:
+        """Create issue links concurrently"""
+        self.logger.info(f"Creating {count} issue links (concurrency: {self.concurrency})...")
+
+        if len(issue_keys) < 2:
+            self.logger.warning("Need at least 2 issues to create links")
+            return 0
+
+        # Get available link types
+        if self.dry_run:
+            link_types = [{'name': 'Blocks'}, {'name': 'Relates'}]
+        else:
+            response = self._api_call('GET', 'issueLinkType')
+            if not response:
+                self.logger.warning("Could not fetch link types")
+                return 0
+            link_types = response.json().get('issueLinkTypes', [])
+            if not link_types:
+                self.logger.warning("No link types available")
+                return 0
+
+        # Pre-generate all link tasks
+        tasks = []
+        for _ in range(count):
+            inward_issue = random.choice(issue_keys)
+            outward_issue = random.choice([k for k in issue_keys if k != inward_issue])
+            link_type = random.choice(link_types)
+
+            link_data = {
+                "type": {"name": link_type['name']},
+                "inwardIssue": {"key": inward_issue},
+                "outwardIssue": {"key": outward_issue}
+            }
+            tasks.append(self._api_call_async('POST', 'issueLink', data=link_data))
+
+        # Execute with progress tracking
+        created = 0
+        for i in range(0, len(tasks), self.concurrency * 2):
+            batch = tasks[i:i + self.concurrency * 2]
+            results = await asyncio.gather(*batch, return_exceptions=True)
+            for result in results:
+                if isinstance(result, tuple) and result[0]:
+                    created += 1
+            self.logger.info(f"Created {created}/{count} issue links")
+
+        return created
+
     def add_watchers(self, issue_keys: List[str], count: int):
         """Add watchers to issues"""
         self.logger.info(f"Adding {count} watchers...")
@@ -481,7 +727,48 @@ class JiraDataGenerator:
             if created % 10 == 0:
                 self.logger.info(f"Added {created}/{len(watches_per_issue)} watchers")
                 time.sleep(0.2)
-    
+
+    async def add_watchers_async(self, issue_keys: List[str], count: int) -> int:
+        """Add watchers to issues concurrently"""
+        self.logger.info(f"Adding {count} watchers (concurrency: {self.concurrency})...")
+
+        # Get current user as the watcher
+        if self.dry_run:
+            current_user_account_id = "dry-run-account-id"
+        else:
+            response = self._api_call('GET', 'myself')
+            if not response:
+                self.logger.warning("Could not get current user")
+                return 0
+
+            current_user_account_id = response.json().get('accountId')
+            if not current_user_account_id:
+                self.logger.warning("Could not get account ID")
+                return 0
+
+        # Distribute watchers across issues (unique issues only)
+        watches_per_issue = set()
+        for _ in range(count):
+            issue_key = random.choice(issue_keys)
+            watches_per_issue.add(issue_key)
+
+        # Pre-generate all watcher tasks
+        tasks = []
+        for issue_key in watches_per_issue:
+            tasks.append(self._api_call_async('POST', f'issue/{issue_key}/watchers', data=current_user_account_id))
+
+        # Execute with progress tracking
+        created = 0
+        for i in range(0, len(tasks), self.concurrency * 2):
+            batch = tasks[i:i + self.concurrency * 2]
+            results = await asyncio.gather(*batch, return_exceptions=True)
+            for result in results:
+                if isinstance(result, tuple) and result[0]:
+                    created += 1
+            self.logger.info(f"Added {created}/{len(watches_per_issue)} watchers")
+
+        return created
+
     def create_versions(self, count: int):
         """Create project versions"""
         self.logger.info(f"Creating {count} versions...")
@@ -658,6 +945,101 @@ class JiraDataGenerator:
         self.logger.info(f"\nCreated {len(projects)} projects")
         self.logger.info(f"Created {len(all_issue_keys)} issues")
 
+    async def generate_all_async(self, num_issues: int):
+        """Generate all test data based on multipliers using async for high-volume items"""
+        multipliers = MULTIPLIERS[self.size_bucket]
+
+        self.logger.info(f"=" * 60)
+        self.logger.info(f"Starting Jira data generation (async mode)")
+        self.logger.info(f"Size bucket: {self.size_bucket}")
+        self.logger.info(f"Target issues: {num_issues}")
+        self.logger.info(f"Prefix: {self.prefix}")
+        self.logger.info(f"Concurrency: {self.concurrency}")
+        self.logger.info(f"Run ID (for JQL): labels = {self.run_id}")
+        self.logger.info(f"Dry run: {self.dry_run}")
+        self.logger.info(f"=" * 60)
+
+        # Calculate counts - use math.ceil to round up, minimum of 1
+        counts = {}
+        for item_type, multiplier in multipliers.items():
+            raw_count = num_issues * multiplier
+            counts[item_type] = max(1, math.ceil(raw_count))
+
+        self.logger.info(f"\nPlanned creation counts:")
+        self.logger.info(f"  Issues: {num_issues}")
+        for item_type, count in sorted(counts.items()):
+            self.logger.info(f"  {item_type}: {count}")
+
+        # Create projects first (everything else depends on these)
+        # Projects are created sequentially (usually few of them)
+        num_projects = counts.get('project', 1)
+        projects = self.create_projects(num_projects)
+
+        if not projects:
+            self.logger.error("Failed to create projects. Aborting.")
+            return
+
+        # Distribute issues across projects
+        issues_per_project = max(1, num_issues // len(projects))
+        remainder = num_issues % len(projects)
+
+        all_issue_keys = []
+        for idx, project in enumerate(projects):
+            # Update current project context
+            self.project_key = project['key']
+            self._project_id = project['id']
+
+            # Give extra issues to first projects if there's a remainder
+            project_issue_count = issues_per_project + (1 if idx < remainder else 0)
+
+            self.logger.info(f"\nCreating {project_issue_count} issues in project {project['key']}...")
+            # Issues use bulk API - keep synchronous as it's already optimized
+            issue_keys = self.create_issues_bulk(project_issue_count)
+
+            if issue_keys:
+                all_issue_keys.extend(issue_keys)
+
+                # Create components and versions for this project (low volume, keep sync)
+                if counts.get('project_component', 0) > 0:
+                    components_per_project = max(1, counts['project_component'] // len(projects))
+                    self.create_components(components_per_project)
+
+                if counts.get('project_version', 0) > 0:
+                    versions_per_project = max(1, counts['project_version'] // len(projects))
+                    self.create_versions(versions_per_project)
+
+        if not all_issue_keys:
+            self.logger.error("Failed to create any issues. Aborting.")
+            await self._close_async_session()
+            return
+
+        # Create issue-dependent items using async for high volume items
+        try:
+            if counts.get('comment', 0) > 0:
+                await self.create_comments_async(all_issue_keys, counts['comment'])
+
+            if counts.get('issue_worklog', 0) > 0:
+                await self.create_worklogs_async(all_issue_keys, counts['issue_worklog'])
+
+            if counts.get('issue_link', 0) > 0:
+                await self.create_issue_links_async(all_issue_keys, counts['issue_link'])
+
+            if counts.get('issue_watcher', 0) > 0:
+                await self.add_watchers_async(all_issue_keys, counts['issue_watcher'])
+
+        finally:
+            await self._close_async_session()
+
+        self.logger.info(f"\n" + "=" * 60)
+        self.logger.info(f"Data generation complete!")
+        self.logger.info(f"=" * 60)
+        self.logger.info(f"\nTo find all generated data in JQL:")
+        self.logger.info(f"  labels = {self.run_id}")
+        self.logger.info(f"  OR")
+        self.logger.info(f"  labels = {self.prefix}")
+        self.logger.info(f"\nCreated {len(projects)} projects")
+        self.logger.info(f"Created {len(all_issue_keys)} issues")
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -672,6 +1054,14 @@ Examples:
            --prefix PERF \\
            --count 100 \\
            --size small
+
+  # Faster generation with higher concurrency
+  %(prog)s --url https://mycompany.atlassian.net \\
+           --email user@example.com \\
+           --prefix LOAD \\
+           --count 500 \\
+           --size medium \\
+           --concurrency 10
 
   # Dry run to see what would be created
   %(prog)s --url https://mycompany.atlassian.net \\
@@ -701,11 +1091,18 @@ JQL Search:
         default='small',
         help='Instance size bucket (affects multipliers)'
     )
+    parser.add_argument(
+        '--concurrency',
+        type=int,
+        default=5,
+        help='Number of concurrent API requests (default: 5, increase for faster generation)'
+    )
+    parser.add_argument('--no-async', action='store_true', help='Disable async mode (use sequential requests)')
     parser.add_argument('--dry-run', action='store_true', help='Show what would be created without creating it')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
-    
+
     args = parser.parse_args()
-    
+
     # Setup logging
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(
@@ -713,16 +1110,16 @@ JQL Search:
         format='%(asctime)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
-    
+
     # Load environment variables from .env file
     load_dotenv()
-    
+
     # Get API token from: command line arg > .env file > environment variable
     api_token = args.token or os.environ.get('JIRA_API_TOKEN')
     if not api_token:
         print("Error: Jira API token required. Use --token, set JIRA_API_TOKEN in .env file, or set as environment variable", file=sys.stderr)
         sys.exit(1)
-    
+
     try:
         generator = JiraDataGenerator(
             jira_url=args.url,
@@ -730,11 +1127,15 @@ JQL Search:
             api_token=api_token,
             prefix=args.prefix,
             size_bucket=args.size,
-            dry_run=args.dry_run
+            dry_run=args.dry_run,
+            concurrency=args.concurrency
         )
-        
-        generator.generate_all(args.count)
-        
+
+        if args.no_async:
+            generator.generate_all(args.count)
+        else:
+            asyncio.run(generator.generate_all_async(args.count))
+
     except KeyboardInterrupt:
         print("\n\nInterrupted by user", file=sys.stderr)
         sys.exit(1)

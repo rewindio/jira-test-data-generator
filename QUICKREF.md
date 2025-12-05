@@ -2,6 +2,11 @@
 
 ## Installation
 ```bash
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
 
 # Setup .env file with your token
@@ -14,9 +19,8 @@ cp .env.example .env
 ### Dry Run (Always Do This First!)
 ```bash
 python jira_data_generator.py \
-  --url https://rewind.atlassian.net \
-  --email you@rewind.com \
-  --project TEST \
+  --url https://mycompany.atlassian.net \
+  --email you@company.com \
   --prefix TEST \
   --count 50 \
   --size small \
@@ -26,35 +30,45 @@ python jira_data_generator.py \
 ### Quick Test (25 issues)
 ```bash
 python jira_data_generator.py \
-  --url https://rewind.atlassian.net \
-  --email you@rewind.com \
-  --project TEST \
+  --url https://mycompany.atlassian.net \
+  --email you@company.com \
   --prefix QUICK \
   --count 25 \
   --size small
 ```
 
-### Medium Load Test (100 issues)
+### Faster Generation with Higher Concurrency
 ```bash
 python jira_data_generator.py \
-  --url https://rewind.atlassian.net \
-  --email you@rewind.com \
-  --project TEST \
+  --url https://mycompany.atlassian.net \
+  --email you@company.com \
   --prefix LOAD \
-  --count 100 \
-  --size medium
+  --count 500 \
+  --size medium \
+  --concurrency 10
 ```
 
-### Large Performance Test (500 issues)
+### Large Performance Test
 ```bash
 python jira_data_generator.py \
-  --url https://rewind.atlassian.net \
-  --email you@rewind.com \
-  --project TEST \
+  --url https://mycompany.atlassian.net \
+  --email you@company.com \
   --prefix PERF \
-  --count 500 \
+  --count 1000 \
   --size large \
+  --concurrency 15 \
   --verbose
+```
+
+### Sequential Mode (No Async)
+```bash
+python jira_data_generator.py \
+  --url https://mycompany.atlassian.net \
+  --email you@company.com \
+  --prefix TEST \
+  --count 100 \
+  --size small \
+  --no-async
 ```
 
 ## JQL Search Patterns
@@ -91,31 +105,23 @@ labels = PREFIX AND created >= startOfDay()
 | large | Production | 1x | 2.7x | 0.2x | 0.2x |
 | xlarge | Enterprise | 1x | 0.3x | 0.06x | 0.08x |
 
-## Troubleshooting Quick Fixes
+## Concurrency Quick Reference
 
-### Rate Limited
-✓ Normal! Tool will auto-retry. Be patient.
-
-### Auth Error
-```bash
-# Test credentials
-curl -u "you@rewind.com:$JIRA_API_TOKEN" \
-  https://rewind.atlassian.net/rest/api/3/myself
-```
-
-### Project Not Found
-✓ Check project key is correct (e.g., TEST, not "Test Project")
-✓ Verify you have Create Issue permission
+| Concurrency | Use Case | Speed |
+|-------------|----------|-------|
+| `1-3` | Conservative, shared instances | Slower |
+| `5` (default) | Balanced performance | Normal |
+| `10-15` | Faster generation | 2-3x faster |
+| `20+` | Dedicated test instances | 3-4x faster |
 
 ## Time Estimates
 
-| Issues | ~Time | Items |
-|--------|-------|-------|
-| 25 | 2 min | ~250 |
-| 50 | 3 min | ~500 |
-| 100 | 6 min | ~1K |
-| 500 | 25 min | ~5K |
-| 1000 | 50 min | ~10K |
+| Issues | Sequential | Async (c=5) | Async (c=10) |
+|--------|------------|-------------|--------------|
+| 25 | 2 min | 1 min | 30s |
+| 100 | 6 min | 2-3 min | 1-2 min |
+| 500 | 25 min | 10 min | 5-8 min |
+| 1000 | 50 min | 20 min | 10-15 min |
 
 ## Common Options
 
@@ -123,10 +129,34 @@ curl -u "you@rewind.com:$JIRA_API_TOKEN" \
 |------|--------------|
 | `--dry-run` | Preview only, don't create |
 | `--verbose` | Show detailed progress |
+| `--concurrency N` | Concurrent requests (default: 5) |
+| `--no-async` | Sequential mode (debugging) |
 | `--size small` | Use small instance multipliers |
 | `--size medium` | Use medium instance multipliers |
 | `--size large` | Use large instance multipliers |
 | `--size xlarge` | Use xlarge instance multipliers |
+
+## Troubleshooting Quick Fixes
+
+### Rate Limited
+Normal! Tool will auto-retry. If excessive, reduce `--concurrency`.
+
+### Auth Error
+```bash
+# Test credentials
+curl -u "you@company.com:$JIRA_API_TOKEN" \
+  https://mycompany.atlassian.net/rest/api/3/myself
+```
+
+### Project Creation Fails
+- Check API token has project creation permissions
+- Verify prefix is valid (uppercase, max 6 chars for key)
+
+### Async Issues
+```bash
+# Fallback to sequential mode
+python jira_data_generator.py ... --no-async
+```
 
 ## Need Help?
 

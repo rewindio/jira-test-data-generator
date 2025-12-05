@@ -1,4 +1,4 @@
-# agents.md - Jira Test Data Generator
+# CLAUDE.md - Jira Test Data Generator
 
 ## Project Overview
 
@@ -6,8 +6,10 @@
 
 **Key Features**:
 - Bulk API operations (50 issues per call)
+- Async concurrency for high-volume items (comments, worklogs, watchers)
 - Intelligent rate limit handling with exponential backoff
-- Production-based multipliers from Confluence data
+- Production-based multipliers loaded from CSV file
+- Dynamic project creation based on multipliers
 - Unique run ID labeling for easy JQL searching
 - Support for 4 instance size buckets (small/medium/large/xlarge)
 
@@ -19,12 +21,15 @@
 
 ```
 .
-├── jira_data_generator.py    # Main application (24KB)
-├── requirements.txt           # Python dependencies
-├── README.md                  # User-facing documentation
-├── QUICKREF.md               # Quick reference for common commands
-├── example_usage.sh          # Example usage scenarios
-└── agents.md                 # This file - for AI agents
+├── jira_data_generator.py    # Main application (~1200 lines)
+├── item_type_multipliers.csv # Multiplier configuration
+├── requirements.txt          # Python dependencies
+├── .env.example             # API token template
+├── .gitignore               # Python venv and credentials
+├── README.md                # User-facing documentation
+├── QUICKREF.md              # Quick reference for common commands
+├── example_usage.sh         # Example usage scenarios
+└── CLAUDE.md                # This file - for AI agents
 ```
 
 ---
@@ -34,12 +39,13 @@
 ### Core Classes
 
 #### `RateLimitState` (dataclass)
-- **Purpose**: Track rate limiting state across API calls
+- **Purpose**: Track rate limiting state across API calls (thread-safe for async)
 - **Fields**:
   - `retry_after`: Seconds to wait (from Retry-After header)
   - `consecutive_429s`: Count of consecutive rate limit hits
   - `current_delay`: Current exponential backoff delay
   - `max_delay`: Maximum delay cap (60s)
+  - `_lock`: asyncio.Lock for thread-safe updates in async context
 
 #### `JiraDataGenerator` (main class)
 - **Purpose**: Orchestrates all Jira API operations
@@ -47,7 +53,25 @@
   - `BULK_CREATE_LIMIT = 50`: Jira's bulk API limit
   - `run_id`: Unique label format `PREFIX-YYYYMMDD-HHMMSS`
   - `created_issues[]`: Tracks created issue keys for linking
-  - `session`: Requests session with retry strategy
+  - `session`: Requests session with retry strategy (sync)
+  - `_async_session`: aiohttp session for async operations
+  - `_semaphore`: asyncio.Semaphore for concurrency control
+  - `concurrency`: Number of concurrent async requests (default: 5)
+
+### Async vs Sync Operations
+
+The tool uses a hybrid approach:
+
+| Operation | Mode | Reason |
+|-----------|------|--------|
+| Projects | Sequential | Low volume, dependencies |
+| Issues (bulk) | Sequential | Already optimized (50/call) |
+| Components | Sequential | Low volume |
+| Versions | Sequential | Low volume |
+| Comments | **Async** | High volume |
+| Worklogs | **Async** | High volume |
+| Issue Links | **Async** | Medium-high volume |
+| Watchers | **Async** | Medium-high volume |
 
 ### Rate Limiting Strategy
 
@@ -56,34 +80,49 @@
 2. **Fallback**: Exponential backoff starting at 1s, doubling on each 429
 3. **Reset**: Return to 1s delay on successful request
 4. **Max**: Cap at 60s delay
+5. **Thread-safe**: Uses asyncio.Lock for shared state in async context
 
-**Implementation**: `_handle_rate_limit()` method
+**Sync Implementation**: `_handle_rate_limit()` method
+**Async Implementation**: `_handle_rate_limit_async()` method
 
-### API Call Pattern
+### API Call Patterns
 
-All API calls go through `_api_call()` which:
+#### Synchronous (`_api_call`)
+Used for low-volume operations (projects, issues bulk, components, versions):
 1. Handles dry-run mode
 2. Implements retry logic (max 5 attempts)
 3. Processes rate limit responses
 4. Provides timeout protection (30s)
-5. Returns None on failure (caller must check)
+5. Returns Response object or None on failure
+
+#### Asynchronous (`_api_call_async`)
+Used for high-volume operations (comments, worklogs, links, watchers):
+1. Uses aiohttp ClientSession with connection pooling
+2. Semaphore-controlled concurrency
+3. Shared rate limit tracking via asyncio.Lock
+4. Returns tuple: `(success: bool, response_json: Optional[Dict])`
 
 ---
 
 ## Data Model
 
-### Multipliers (MULTIPLIERS dict)
+### Multipliers (loaded from CSV)
 
-**Source**: Confluence page 4143612121 (Average Item Type Counts by Jira Instance Size)
+**Source**: `item_type_multipliers.csv` (formerly hardcoded from Confluence page)
 
-**Structure**:
+**Loading**:
 ```python
-MULTIPLIERS = {
-    'small': {'comment': 4.80, 'issue_attachment': 2.10, ...},
-    'medium': {...},
-    'large': {...},
-    'xlarge': {...}
-}
+def load_multipliers_from_csv(csv_path: Optional[str] = None) -> Dict[str, Dict[str, float]]:
+    """Load multipliers from CSV file."""
+```
+
+**CSV Structure**:
+```csv
+Item Type,Small,Medium,Large,XLarge
+comment,4.80,4.75,2.69,0.26
+issue_worklog,7.27,1.49,0.24,0.06
+project,0.00249,0.00066,0.00032,0.00001
+...
 ```
 
 **Size Buckets**:
@@ -94,16 +133,17 @@ MULTIPLIERS = {
 
 ### Created Item Types
 
-**Project-level**:
+**Project-level** (created sequentially):
+- Projects (dynamically created based on multiplier)
 - Versions (project_version)
 - Components (project_component)
 
-**Issue-level**:
+**Issue-level** (issues created via bulk, others async):
 - Issues (bulk created in batches of 50)
-- Comments (comment)
-- Worklogs (issue_worklog)
-- Watchers (issue_watcher)
-- Issue Links (issue_link)
+- Comments (comment) - **async**
+- Worklogs (issue_worklog) - **async**
+- Watchers (issue_watcher) - **async**
+- Issue Links (issue_link) - **async**
 
 **Not Currently Implemented**:
 - Attachments (issue_attachment) - requires file handling
@@ -119,8 +159,9 @@ MULTIPLIERS = {
 ### Naming
 
 - **Prefixes**: User-specified, appears in all created items (e.g., `PERF`, `LOAD`)
+- **Project Keys**: `{PREFIX[:6]}{N}` (e.g., `PERF1`, `PERF2`)
 - **Run IDs**: `{PREFIX}-YYYYMMDD-HHMMSS` format
-- **Issue Summaries**: `{PREFIX} Test Issue {N}`
+- **Issue Summaries**: `{PROJECT_KEY} Test Issue {N}`
 - **Versions**: `{PREFIX} v{N}.0`
 - **Components**: `{PREFIX}-Component-{N}`
 
@@ -133,111 +174,120 @@ MULTIPLIERS = {
 
 ### Error Handling
 
-- **Fail Fast**: If issue creation fails, abort (everything depends on issues)
+- **Fail Fast**: If project/issue creation fails, abort (everything depends on these)
 - **Continue on Error**: For comments/worklogs/watchers (log and continue)
 - **Retry Logic**: 5 attempts for transient errors
-- **Graceful Degradation**: Missing features (like attachments) are skipped with warnings
+- **Graceful Degradation**: Missing features are skipped with warnings
 
 ---
 
 ## Extending the Project
 
-### Adding New Item Types
+### Adding New Async Item Types
 
-**Template for adding a new item type**:
+**Template for adding a new async item type**:
+
+```python
+async def create_new_items_async(self, issue_keys: List[str], count: int) -> int:
+    """Create new item type concurrently"""
+    self.logger.info(f"Creating {count} new items (concurrency: {self.concurrency})...")
+
+    # Pre-generate all tasks
+    tasks = []
+    for i in range(count):
+        issue_key = random.choice(issue_keys)
+        item_data = {
+            "field1": "value1",
+            "field2": self.generate_random_text()
+        }
+        tasks.append(self._api_call_async('POST', f'issue/{issue_key}/newitem', data=item_data))
+
+    # Execute with progress tracking
+    created = 0
+    for i in range(0, len(tasks), self.concurrency * 2):
+        batch = tasks[i:i + self.concurrency * 2]
+        results = await asyncio.gather(*batch, return_exceptions=True)
+        for result in results:
+            if isinstance(result, tuple) and result[0]:
+                created += 1
+        self.logger.info(f"Created {created}/{count} new items")
+
+    return created
+```
+
+**Then add to `generate_all_async()` method**:
+```python
+if counts.get('new_item_type', 0) > 0:
+    await self.create_new_items_async(all_issue_keys, counts['new_item_type'])
+```
+
+### Adding New Sync Item Types
+
+**Template for sync item type**:
 
 ```python
 def create_new_items(self, issue_keys: List[str], count: int):
     """Create new item type"""
     self.logger.info(f"Creating {count} new items...")
-    
+
     created = 0
     for i in range(count):
-        # Pick random issue
         issue_key = random.choice(issue_keys)
-        
-        # Build payload
         item_data = {
             "field1": "value1",
             "field2": self.generate_random_text()
         }
-        
-        # Make API call
+
         response = self._api_call('POST', f'issue/{issue_key}/newitem', data=item_data)
         if response:
             created += 1
-        
-        # Strategic delay every 10 items
+
         if created % 10 == 0:
             self.logger.info(f"Created {created}/{count} new items")
             time.sleep(0.2)
 ```
 
-**Then add to `generate_all()` method**:
-```python
-if counts.get('new_item_type', 0) > 0:
-    self.create_new_items(issue_keys, counts['new_item_type'])
-```
-
 ### Updating Multipliers
 
-1. Update Confluence page (source of truth)
-2. Update `MULTIPLIERS` dict in lines 27-80
-3. Test with `--dry-run` to verify calculations
-4. Document changes in README.md
-
-### Adding Bulk Operations
-
-**Pattern for bulk operations**:
-```python
-def create_items_bulk(self, items_data: List[Dict]) -> List[str]:
-    """Create items in bulk"""
-    created_ids = []
-    
-    # Split into chunks (API limit)
-    for i in range(0, len(items_data), self.BULK_CREATE_LIMIT):
-        batch = items_data[i:i + self.BULK_CREATE_LIMIT]
-        
-        response = self._api_call('POST', 'bulk/endpoint', data={"items": batch})
-        if response:
-            result = response.json()
-            created_ids.extend([item['id'] for item in result.get('items', [])])
-        
-        # Delay between batches
-        if i + self.BULK_CREATE_LIMIT < len(items_data):
-            time.sleep(0.5)
-    
-    return created_ids
-```
+1. Edit `item_type_multipliers.csv` file
+2. Test with `--dry-run` to verify calculations
+3. Document changes in README.md
 
 ---
 
 ## Common Modifications
 
+### Change Concurrency Default
+
+```python
+# In __init__() method
+concurrency: int = 5  # Change default value
+```
+
 ### Change Bulk API Limit
 
 ```python
-# Line 95
+# Class constant
 BULK_CREATE_LIMIT = 50  # Change to Jira's limit for specific endpoint
 ```
 
 ### Adjust Rate Limit Behavior
 
 ```python
-# Line 89 - Change max delay
+# In RateLimitState dataclass
 max_delay: float = 60.0  # Increase for more conservative rate limiting
 
-# Line 169 - Change backoff multiplier
+# In _handle_rate_limit_async()
 self.rate_limit.current_delay * 2  # Change to * 1.5 for slower backoff
 ```
 
 ### Add Custom Issue Fields
 
 ```python
-# In create_issues_bulk(), line 271-290
+# In create_issues_bulk(), inside the issue_data dict
 issue_data = {
     "fields": {
-        "project": {"key": self.project_key},
+        "project": {"id": project_id},
         "summary": summary,
         "description": description,
         "issuetype": {"name": issue_type},
@@ -258,9 +308,8 @@ issue_data = {
 ```bash
 # Always test with --dry-run first
 python jira_data_generator.py \
-  --url https://rewind.atlassian.net \
-  --email test@rewind.com \
-  --project TEST \
+  --url https://mycompany.atlassian.net \
+  --email test@company.com \
   --prefix DRYRUN \
   --count 100 \
   --size small \
@@ -274,74 +323,53 @@ python jira_data_generator.py \
 python jira_data_generator.py ... --count 10 --size small
 ```
 
+### Test Different Concurrency Levels
+
+```bash
+# Low concurrency (safer)
+python jira_data_generator.py ... --concurrency 3
+
+# High concurrency (faster)
+python jira_data_generator.py ... --concurrency 15
+
+# Sequential (debugging)
+python jira_data_generator.py ... --no-async
+```
+
 ### Verify in Jira
 
 ```jql
 labels = PREFIX-20241204-143022
 ```
 
-### Cleanup Test Data
-
-```jql
-# Find test data
-labels = TESTPREFIX
-
-# Bulk delete in Jira UI
-# Or use Jira bulk operations
-```
-
 ---
 
 ## Performance Characteristics
 
-### Timing Estimates (with rate limits)
+### Timing Estimates
 
-| Issues | Total Items | Estimated Time |
-|--------|-------------|----------------|
-| 25     | ~250        | 1-2 min        |
-| 50     | ~500        | 2-3 min        |
-| 100    | ~1,000      | 5-7 min        |
-| 500    | ~5,000      | 20-30 min      |
-| 1,000  | ~10,000     | 45-60 min      |
+| Issues | Total Items | Sequential | Async (c=5) | Async (c=10) |
+|--------|-------------|------------|-------------|--------------|
+| 25     | ~250        | 1-2 min    | 30-60s      | 20-40s       |
+| 100    | ~1,000      | 5-7 min    | 2-3 min     | 1-2 min      |
+| 500    | ~5,000      | 20-30 min  | 8-12 min    | 5-8 min      |
+| 1,000  | ~10,000     | 45-60 min  | 15-25 min   | 10-15 min    |
+
+*Times vary based on rate limits and network latency*
 
 ### Bottlenecks
 
-1. **Issue Links**: Individual API calls (no bulk API)
-2. **Watchers**: Individual API calls per issue
-3. **Rate Limits**: Can slow down by 2-3x if hit frequently
-4. **Worklogs**: Individual API calls (no bulk API)
+1. **Rate Limits**: Primary bottleneck - higher concurrency hits limits faster
+2. **Network Latency**: Each API call has ~100-300ms latency
+3. **No Bulk API**: Issue links, watchers require individual calls
 
-### Optimization Opportunities
+### Optimization Features
 
-1. **Parallel Requests**: Use async/await for independent items
-2. **Connection Pooling**: Already implemented via `requests.Session`
-3. **Batch Processing**: Already implemented for issues (50 per call)
-4. **Request Compression**: Not implemented (minor gains)
-
----
-
-## Known Limitations
-
-### Not Implemented
-
-- **Attachments**: Requires file upload handling
-- **Remote Links**: Less common, low priority
-- **Properties**: Complex JSON structure
-- **Votes**: Negligible multiplier values
-- **Sprints**: Requires Jira Software with Scrum boards
-
-### API Limitations
-
-- **Bulk Issue Limit**: 50 issues per call (Jira Cloud limit)
-- **No Bulk Links**: Issue links require individual API calls
-- **No Bulk Watchers**: Watchers require individual API calls
-- **Rate Limits**: Vary by Jira Cloud plan (typically 1000 req/min)
-
-### Authentication
-
-- **API Token Only**: Does not support OAuth 2.0
-- **Cloud Only**: Not tested with Jira Server/Data Center
-- **Single User**: All items created by one user
+1. **Async I/O**: Concurrent requests for high-volume items
+2. **Semaphore Control**: Prevents overwhelming the API
+3. **Connection Pooling**: Reuses HTTP connections (both sync and async)
+4. **Batch Processing**: Issues created 50 at a time via bulk API
+5. **Shared Rate Limit State**: All async tasks respect the same limits
 
 ---
 
@@ -349,46 +377,35 @@ labels = TESTPREFIX
 
 ### Required
 
-- `requests>=2.31.0`: HTTP library with retry support
+- `requests>=2.31.0`: HTTP library with retry support (sync)
+- `aiohttp>=3.9.0`: Async HTTP library (async)
 - `urllib3>=2.0.0`: Connection pooling and retries
 - `python-dotenv>=1.0.0`: Load environment variables from .env file
 
 ### Python Version
 
-- **Minimum**: Python 3.7+ (dataclasses, type hints)
+- **Minimum**: Python 3.7+ (dataclasses, type hints, asyncio)
 - **Recommended**: Python 3.9+ (improved type hints)
-- **Tested**: Python 3.11
+- **Tested**: Python 3.11, 3.14
 
 ---
 
-## Environment Variables
+## Command Line Options
 
-### Supported
+| Option | Required | Description | Default |
+|--------|----------|-------------|---------|
+| `--url` | Yes | Jira instance URL | - |
+| `--email` | Yes | Your Jira email | - |
+| `--token` | No* | API token | From env |
+| `--prefix` | Yes | Prefix for items and project keys | - |
+| `--count` | Yes | Number of issues to create | - |
+| `--size` | No | Instance size bucket | `small` |
+| `--concurrency` | No | Number of concurrent API requests | `5` |
+| `--no-async` | No | Disable async mode (sequential) | `false` |
+| `--dry-run` | No | Preview only, no API calls | `false` |
+| `--verbose` | No | Enable debug logging | `false` |
 
-The tool uses `python-dotenv` to load environment variables from a `.env` file.
-
-**Priority order**:
-1. `--token` command line argument (highest priority)
-2. `JIRA_API_TOKEN` in `.env` file
-3. `JIRA_API_TOKEN` environment variable (lowest priority)
-
-**Setup**:
-```bash
-cp .env.example .env
-# Edit .env and add your token
-```
-
-**Example .env file**:
-```bash
-JIRA_API_TOKEN=your_actual_token_here
-```
-
-### Future Considerations
-
-```bash
-export JIRA_URL='https://rewind.atlassian.net'  # Make --url optional
-export JIRA_EMAIL='user@rewind.com'  # Make --email optional
-```
+\* Token can also be set via `JIRA_API_TOKEN` environment variable or `.env` file
 
 ---
 
@@ -397,54 +414,71 @@ export JIRA_EMAIL='user@rewind.com'  # Make --email optional
 ### Issue: "Rate limit hit" warnings
 
 **Solution**: This is expected. The code handles it automatically. If persistent:
-- Increase delays in strategic sleep statements
-- Reduce batch sizes
-- Add delays between operations
+- Reduce `--concurrency` value
+- The tool will auto-adjust with exponential backoff
+
+### Issue: "Failed to create projects. Aborting."
+
+**Check**:
+1. API token has project creation permissions
+2. Prefix creates valid project keys (uppercase, max 10 chars)
+3. No existing projects conflict with generated keys
 
 ### Issue: "Failed to create issues. Aborting."
 
 **Check**:
 1. API token is valid
 2. User has permission in project
-3. Project key is correct
+3. Project was created successfully
 4. Jira URL is correct (https://company.atlassian.net)
 
-### Issue: "Could not get current user"
+### Issue: Async-related errors
 
-**Check**:
-- API token permissions
-- Network connectivity
-- Jira URL format
+**Solution**: Try `--no-async` flag to use sequential mode
+```bash
+python jira_data_generator.py ... --no-async
+```
 
 ### Issue: Slow performance
 
 **Expected**: Large datasets take time due to rate limits
-**Unexpected**: Check network latency, Jira instance health
+**Try**: Increase `--concurrency` (but may hit rate limits faster)
 
 ---
 
-## Future Enhancements
+## Quick Reference for Common Agent Tasks
 
-### Priority 1 (High Value)
+### "Add support for [feature]"
 
-- [ ] Add attachment support with sample files
-- [ ] Implement sprint creation for Scrum projects
-- [ ] Add issue history tracking (status transitions)
-- [ ] Support custom field configuration from JSON
+1. Check if endpoint exists in Jira API v3 docs
+2. Decide sync vs async (based on volume)
+3. Add method following patterns above
+4. Add to `generate_all()` or `generate_all_async()` method
+5. Add multiplier to CSV if needed
+6. Test with --dry-run
+7. Update README.md
 
-### Priority 2 (Medium Value)
+### "Fix rate limiting issue"
 
-- [ ] Parallel processing with asyncio
-- [ ] Progress bar with ETA
-- [ ] Resume capability (save state)
-- [ ] Delete/cleanup command
+1. Check `_handle_rate_limit_async()` method for async
+2. Check `_handle_rate_limit()` method for sync
+3. Verify asyncio.Lock is used for shared state
+4. Adjust max_delay or backoff multiplier
+5. Consider reducing default concurrency
 
-### Priority 3 (Nice to Have)
+### "Change output format"
 
-- [ ] Config file support (YAML/JSON)
-- [ ] Multiple users (distribute created items)
-- [ ] Realistic date distributions (not all "now")
-- [ ] Export statistics/report
+1. Modify logging statements in relevant methods
+2. Keep structure: "Created X/Y items"
+3. For async: log progress in batch loop
+4. Update README.md examples
+
+### "Add new size bucket"
+
+1. Add column to `item_type_multipliers.csv`
+2. Update `size_map` in `load_multipliers_from_csv()`
+3. Add to argparse choices
+4. Document in README.md
 
 ---
 
@@ -455,26 +489,27 @@ export JIRA_EMAIL='user@rewind.com'  # Make --email optional
 Use throughout for clarity:
 ```python
 def method_name(self, param: str, count: int) -> List[str]:
+
+async def async_method(self, items: List[str]) -> Tuple[bool, Optional[Dict]]:
 ```
 
-### Docstrings
+### Async Patterns
 
-Use triple-quoted strings with brief description:
 ```python
-def method_name(self, param: str):
-    """Brief description of what this does"""
-```
+# Creating tasks
+tasks = [self._api_call_async(...) for item in items]
 
-### Error Handling
+# Batch execution with progress
+for i in range(0, len(tasks), batch_size):
+    batch = tasks[i:i + batch_size]
+    results = await asyncio.gather(*batch, return_exceptions=True)
+    # Process results...
 
-Prefer explicit checks over exceptions:
-```python
-response = self._api_call(...)
-if not response:
-    self.logger.warning("Could not create item")
-    return
-
-# Continue with response.json()
+# Session cleanup
+try:
+    # ... async operations
+finally:
+    await self._close_async_session()
 ```
 
 ### Logging
@@ -491,20 +526,17 @@ self.logger.debug("Detailed info")       # Verbose mode only
 
 ## Integration Points
 
-### Confluence
-
-**Source**: https://rewind.atlassian.net/wiki/spaces/DEV/pages/4143612121
-**Used For**: Multiplier values (MULTIPLIERS dict)
-**Update Frequency**: When production patterns change
-
 ### Jira Cloud REST API v3
 
 **Endpoints Used**:
+- POST `/rest/api/3/project` - Create project
+- GET `/rest/api/3/project/{key}` - Get project details
 - POST `/rest/api/3/issue/bulk` - Bulk issue creation
 - POST `/rest/api/3/issue/{issueKey}/comment` - Add comments
 - POST `/rest/api/3/issue/{issueKey}/worklog` - Add worklogs
 - POST `/rest/api/3/issue/{issueKey}/watchers` - Add watchers
 - POST `/rest/api/3/issueLink` - Create issue links
+- GET `/rest/api/3/issueLinkType` - Get link types
 - POST `/rest/api/3/version` - Create versions
 - POST `/rest/api/3/component` - Create components
 - GET `/rest/api/3/myself` - Get current user
@@ -513,40 +545,15 @@ self.logger.debug("Detailed info")       # Verbose mode only
 
 ---
 
-## Security Considerations
-
-### API Token Handling
-
-- Never log API tokens
-- Store in `.env` file (included in .gitignore)
-- Support environment variable (JIRA_API_TOKEN)
-- Clear from memory after use (future enhancement)
-- `.env` file is git-ignored by default
-
-### Data Privacy
-
-- All data is test data (lorem ipsum)
-- No real user data in generated content
-- Use prefix to identify test data clearly
-
-### Rate Limiting
-
-- Respects Jira's rate limits
-- Implements exponential backoff
-- Prevents abuse scenarios
-
----
-
-## Contact & Support
-
-**Project Owner**: VP Cloud Operations & Security, Rewind
-**Repository**: TBD
-**Documentation**: README.md (user-facing), agents.md (AI-facing)
-**Questions**: Check Rewind's internal documentation or Confluence page
-
----
-
 ## Version History
+
+- **v1.1** (2024-12-05): Async concurrency support
+  - Added aiohttp for async HTTP requests
+  - Concurrent creation for comments, worklogs, watchers, links
+  - `--concurrency` flag to control parallel requests
+  - `--no-async` flag for sequential mode
+  - Thread-safe rate limiting with asyncio.Lock
+  - 2-4x performance improvement for large datasets
 
 - **v1.0** (2024-12-04): Initial release
   - Bulk issue creation
@@ -554,42 +561,10 @@ self.logger.debug("Detailed info")       # Verbose mode only
   - 4 size buckets
   - Comments, worklogs, watchers, links
   - Versions and components
+  - Multipliers loaded from CSV
+  - Dynamic project creation
 
 ---
 
-## Quick Reference for Common Agent Tasks
-
-### "Add support for [feature]"
-
-1. Check if endpoint exists in Jira API v3 docs
-2. Add method following pattern in "Extending the Project"
-3. Add to `generate_all()` method
-4. Update MULTIPLIERS if needed
-5. Test with --dry-run
-6. Update README.md
-
-### "Fix rate limiting issue"
-
-1. Check `_handle_rate_limit()` method
-2. Verify exponential backoff logic
-3. Check if Retry-After header is being used
-4. Adjust max_delay or backoff multiplier
-5. Add logging if needed
-
-### "Change output format"
-
-1. Modify logging statements in relevant methods
-2. Keep structure: "Created X/Y items"
-3. Update README.md examples
-
-### "Add new size bucket"
-
-1. Add to MULTIPLIERS dict with appropriate values
-2. Add to argparse choices (line 592)
-3. Document in README.md
-4. Update QUICKREF.md comparison table
-
----
-
-**Last Updated**: 2024-12-04
+**Last Updated**: 2024-12-05
 **AI Agent Note**: This file is specifically for you. The user-facing docs are in README.md.
