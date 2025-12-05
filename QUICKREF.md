@@ -98,12 +98,12 @@ labels = PREFIX AND created >= startOfDay()
 
 ## Size Buckets Quick Reference
 
-| Size | Use For | Issues | Comments | Worklogs | Links |
-|------|---------|--------|----------|----------|-------|
-| small | Dev/Quick | 1x | 4.8x | 7.3x | 0.3x |
-| medium | Staging | 1x | 4.8x | 1.5x | 0.2x |
-| large | Production | 1x | 2.7x | 0.2x | 0.2x |
-| xlarge | Enterprise | 1x | 0.3x | 0.06x | 0.08x |
+| Size | Use For | Issues | Comments | Worklogs | Attachments | Links |
+|------|---------|--------|----------|----------|-------------|-------|
+| small | Dev/Quick | 1x | 4.8x | 7.3x | 2.1x | 0.3x |
+| medium | Staging | 1x | 4.8x | 1.5x | 1.6x | 0.2x |
+| large | Production | 1x | 2.7x | 0.2x | 1.5x | 0.2x |
+| xlarge | Enterprise | 1x | 0.3x | 0.06x | 0.15x | 0.08x |
 
 ## Concurrency Quick Reference
 
@@ -157,6 +157,49 @@ curl -u "you@company.com:$JIRA_API_TOKEN" \
 # Fallback to sequential mode
 python jira_data_generator.py ... --no-async
 ```
+
+---
+
+## User Generator
+
+### Invite Sandbox Users
+```bash
+python jira_user_generator.py \
+  --url https://mycompany.atlassian.net \
+  --email you@company.com \
+  --base-email you@company.com \
+  --users 5
+```
+
+### With Groups
+```bash
+python jira_user_generator.py \
+  --url https://mycompany.atlassian.net \
+  --email you@company.com \
+  --base-email you@company.com \
+  --users 10 \
+  --groups "Test Team 1" "Test Team 2"
+```
+
+### User Generator Options
+
+| Flag | What It Does |
+|------|--------------|
+| `--base-email` | Email for plus-addressing (you@domain → you+sandbox1@domain) |
+| `--users N` | Number of sandbox users to create |
+| `--groups "A" "B"` | Groups to create |
+| `--products X` | Products to grant: `jira-software` (default), `jira-core`, `jira-servicedesk` |
+| `--user-prefix` | Display name prefix (default: Sandbox) |
+| `--dry-run` | Preview only |
+
+### Generated Emails
+```
+you+sandbox1@company.com
+you+sandbox2@company.com
+you+sandbox3@company.com
+```
+
+---
 
 ## Need Help?
 
