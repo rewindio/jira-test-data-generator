@@ -39,13 +39,15 @@ class JiraAPIClient:
         email: str,
         api_token: str,
         dry_run: bool = False,
-        concurrency: int = 5
+        concurrency: int = 5,
+        benchmark: Optional[Any] = None
     ):
         self.jira_url = jira_url.rstrip('/')
         self.email = email
         self.api_token = api_token
         self.dry_run = dry_run
         self.concurrency = concurrency
+        self.benchmark = benchmark  # Optional BenchmarkTracker for stats
 
         self.rate_limit = RateLimitState()
         self.session = self._create_session()
@@ -73,10 +75,26 @@ class JiraAPIClient:
 
         return session
 
+    def _record_request(self) -> None:
+        """Record a request in benchmark stats."""
+        if self.benchmark:
+            self.benchmark.record_request()
+
+    def _record_rate_limit(self) -> None:
+        """Record a rate limit in benchmark stats."""
+        if self.benchmark:
+            self.benchmark.record_rate_limit()
+
+    def _record_error(self) -> None:
+        """Record an error in benchmark stats."""
+        if self.benchmark:
+            self.benchmark.record_error()
+
     def _handle_rate_limit(self, response: requests.Response):
         """Handle rate limit responses intelligently"""
         if response.status_code == 429:
             self.rate_limit.consecutive_429s += 1
+            self._record_rate_limit()
 
             # Check for Retry-After header
             retry_after = response.headers.get('Retry-After')
@@ -134,6 +152,7 @@ class JiraAPIClient:
 
         for attempt in range(max_retries):
             try:
+                self._record_request()
                 response = self.session.request(
                     method=method,
                     url=url,
@@ -166,6 +185,7 @@ class JiraAPIClient:
                     # Log at debug level - this is expected behavior when re-running
                     self.logger.debug(f"Item already exists: {endpoint}")
                 else:
+                    self._record_error()
                     self.logger.error(f"API call failed (attempt {attempt + 1}/{max_retries}): {e}")
                     # Log response body for errors to help debug
                     if hasattr(e, 'response') and e.response is not None:
@@ -210,6 +230,7 @@ class JiraAPIClient:
     async def _handle_rate_limit_async(self, status: int, headers: dict) -> float:
         """Handle rate limit responses in async context. Returns delay if rate limited."""
         if status == 429:
+            self._record_rate_limit()
             async with self.rate_limit._lock:
                 self.rate_limit.consecutive_429s += 1
 
@@ -263,6 +284,7 @@ class JiraAPIClient:
         async with self._semaphore:
             for attempt in range(max_retries):
                 try:
+                    self._record_request()
                     async with session.request(method, url, json=data, params=params) as response:
                         delay = await self._handle_rate_limit_async(response.status, dict(response.headers))
 
@@ -277,6 +299,7 @@ class JiraAPIClient:
                             if is_already_exists:
                                 self.logger.debug(f"Item already exists: {endpoint}")
                             else:
+                                self._record_error()
                                 self.logger.error(f"API call failed ({response.status}): {endpoint}")
                                 self.logger.error(f"Response: {error_text}")
                             # Don't retry on client errors (4xx) except 429 (rate limit)
@@ -294,6 +317,7 @@ class JiraAPIClient:
                         return (True, result)
 
                 except aiohttp.ClientError as e:
+                    self._record_error()
                     self.logger.error(f"Async API call failed (attempt {attempt + 1}/{max_retries}): {e}")
                     if attempt < max_retries - 1:
                         await asyncio.sleep(2 ** attempt)

@@ -4,6 +4,7 @@ Project generation module.
 Handles creation of projects, versions, components, categories, and properties.
 """
 
+import asyncio
 import random
 import time
 from datetime import datetime
@@ -22,9 +23,10 @@ class ProjectGenerator(JiraAPIClient):
         api_token: str,
         prefix: str,
         dry_run: bool = False,
-        concurrency: int = 5
+        concurrency: int = 5,
+        benchmark=None
     ):
-        super().__init__(jira_url, email, api_token, dry_run, concurrency)
+        super().__init__(jira_url, email, api_token, dry_run, concurrency, benchmark)
         self.prefix = prefix
         self.run_id = f"{prefix}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
@@ -403,6 +405,108 @@ class ProjectGenerator(JiraAPIClient):
             if (created + failed) % 10 == 0:
                 self.logger.info(f"Created {created}/{count} project properties ({failed} failed)")
                 time.sleep(0.2)
+
+        self.logger.info(f"Project properties complete: {created} created, {failed} failed")
+        return created
+
+    # ========== ASYNC METHODS ==========
+
+    async def create_versions_async(self, project_key: str, count: int) -> List[str]:
+        """Create project versions concurrently."""
+        self.logger.info(f"Creating {count} versions for project {project_key} (concurrency: {self.concurrency})...")
+
+        # Pre-generate all version data
+        tasks = []
+        for i in range(count):
+            version_data = {
+                "name": f"{self.prefix} v{i + 1}.0",
+                "description": f"Test version {i + 1} - {self.generate_random_text(5, 10)}",
+                "project": project_key,
+                "released": i < count // 2  # Half released, half unreleased
+            }
+            tasks.append(self._api_call_async('POST', 'version', data=version_data))
+
+        # Execute with progress tracking
+        version_ids = []
+        for i in range(0, len(tasks), self.concurrency * 2):
+            batch = tasks[i:i + self.concurrency * 2]
+            results = await asyncio.gather(*batch, return_exceptions=True)
+            for result in results:
+                if isinstance(result, tuple) and result[0] and result[1]:
+                    version_ids.append(result[1].get('id'))
+                elif self.dry_run:
+                    version_ids.append(f"version-{len(version_ids)}")
+            self.logger.info(f"Created {len(version_ids)}/{count} versions")
+
+        self.created_versions.extend(version_ids)
+        return version_ids
+
+    async def create_components_async(self, project_key: str, count: int) -> List[str]:
+        """Create project components concurrently."""
+        self.logger.info(f"Creating {count} components for project {project_key} (concurrency: {self.concurrency})...")
+
+        # Pre-generate all component data
+        tasks = []
+        for i in range(count):
+            component_data = {
+                "name": f"{self.prefix}-Component-{i + 1}",
+                "description": f"Test component - {self.generate_random_text(5, 10)}",
+                "project": project_key
+            }
+            tasks.append(self._api_call_async('POST', 'component', data=component_data))
+
+        # Execute with progress tracking
+        component_ids = []
+        for i in range(0, len(tasks), self.concurrency * 2):
+            batch = tasks[i:i + self.concurrency * 2]
+            results = await asyncio.gather(*batch, return_exceptions=True)
+            for result in results:
+                if isinstance(result, tuple) and result[0] and result[1]:
+                    component_ids.append(result[1].get('id'))
+                elif self.dry_run:
+                    component_ids.append(f"component-{len(component_ids)}")
+            self.logger.info(f"Created {len(component_ids)}/{count} components")
+
+        self.created_components.extend(component_ids)
+        return component_ids
+
+    async def create_project_properties_async(self, project_keys: List[str], count: int) -> int:
+        """Create project properties distributed across projects concurrently."""
+        self.logger.info(f"Creating {count} project properties (concurrency: {self.concurrency})...")
+
+        # Pre-generate all property data
+        tasks = []
+        for i in range(count):
+            project_key = project_keys[i % len(project_keys)]
+            property_key = f"{self.prefix.lower()}_property_{i + 1}"
+
+            property_value = {
+                "generatedBy": "jira-test-data-generator",
+                "runId": self.run_id,
+                "timestamp": datetime.now().isoformat(),
+                "index": i + 1,
+                "category": random.choice(["config", "metadata", "settings", "cache"]),
+                "values": {
+                    "enabled": random.choice([True, False]),
+                    "threshold": random.randint(1, 100),
+                    "mode": random.choice(["auto", "manual", "scheduled"]),
+                    "description": self.generate_random_text(5, 15)
+                }
+            }
+            tasks.append(self._api_call_async('PUT', f'project/{project_key}/properties/{property_key}', data=property_value))
+
+        # Execute with progress tracking
+        created = 0
+        failed = 0
+        for i in range(0, len(tasks), self.concurrency * 2):
+            batch = tasks[i:i + self.concurrency * 2]
+            results = await asyncio.gather(*batch, return_exceptions=True)
+            for result in results:
+                if isinstance(result, tuple) and result[0]:
+                    created += 1
+                else:
+                    failed += 1
+            self.logger.info(f"Created {created}/{count} project properties ({failed} failed)")
 
         self.logger.info(f"Project properties complete: {created} created, {failed} failed")
         return created

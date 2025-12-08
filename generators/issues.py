@@ -29,9 +29,10 @@ class IssueGenerator(JiraAPIClient):
         api_token: str,
         prefix: str,
         dry_run: bool = False,
-        concurrency: int = 5
+        concurrency: int = 5,
+        benchmark=None
     ):
-        super().__init__(jira_url, email, api_token, dry_run, concurrency)
+        super().__init__(jira_url, email, api_token, dry_run, concurrency, benchmark)
         self.prefix = prefix
 
         # Track created items
@@ -251,6 +252,10 @@ class IssueGenerator(JiraAPIClient):
         url = f"{self.jira_url}/rest/api/3/issue/{issue_key}/attachments"
         auth = aiohttp.BasicAuth(self.email, self.api_token)
 
+        # Ensure semaphore is initialized
+        if self._semaphore is None:
+            self._semaphore = asyncio.Semaphore(self.concurrency)
+
         async with self._semaphore:
             try:
                 data = aiohttp.FormData()
@@ -272,13 +277,16 @@ class IssueGenerator(JiraAPIClient):
                         if response.status >= 400:
                             error_text = await response.text()
                             if 'already exists' not in error_text.lower():
-                                self.logger.error(f"Failed to attach {filename} to {issue_key}: {response.status}")
+                                self.logger.error(f"Failed to attach {filename} to {issue_key}: {response.status} - {error_text[:200]}")
                             return False
 
                         return True
 
             except aiohttp.ClientError as e:
-                self.logger.error(f"Failed to attach {filename} to {issue_key}: {e}")
+                self.logger.error(f"Failed to attach {filename} to {issue_key}: ClientError - {e}")
+                return False
+            except Exception as e:
+                self.logger.error(f"Failed to attach {filename} to {issue_key}: {type(e).__name__} - {e}")
                 return False
 
     async def create_attachments_async(self, issue_keys: List[str], count: int) -> int:
@@ -299,6 +307,9 @@ class IssueGenerator(JiraAPIClient):
             for result in results:
                 if result is True:
                     created += 1
+                elif isinstance(result, Exception):
+                    self.logger.error(f"Attachment failed with exception: {type(result).__name__} - {result}")
+                    failed += 1
                 else:
                     failed += 1
             self.logger.info(f"Created {created}/{count} attachments ({failed} failed)")

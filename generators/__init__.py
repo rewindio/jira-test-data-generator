@@ -10,6 +10,9 @@ from .issue_items import IssueItemsGenerator
 from .projects import ProjectGenerator
 from .agile import AgileGenerator
 from .filters import FilterGenerator
+from .custom_fields import CustomFieldGenerator, CUSTOM_FIELD_TYPES
+from .checkpoint import CheckpointManager, CheckpointData, PhaseProgress
+from .benchmark import BenchmarkTracker, PhaseMetrics
 
 __all__ = [
     'RateLimitState',
@@ -19,4 +22,11 @@ __all__ = [
     'ProjectGenerator',
     'AgileGenerator',
     'FilterGenerator',
+    'CustomFieldGenerator',
+    'CUSTOM_FIELD_TYPES',
+    'CheckpointManager',
+    'CheckpointData',
+    'PhaseProgress',
+    'BenchmarkTracker',
+    'PhaseMetrics',
 ]

@@ -13,11 +13,17 @@ A Python tool to generate realistic test data for Jira instances based on produc
 - **Easy Cleanup** - All items tagged with searchable labels for easy JQL queries
 - **Size-Based Generation** - Supports Small/Medium/Large/XLarge instance profiles
 - **Dry Run Mode** - Preview what will be created without making changes
+- **Checkpointing** - Resume interrupted runs for large-scale data generation (18M+ issues)
+- **Benchmarking** - Track timing per phase with extrapolation for large datasets
+- **Custom Fields** - Create custom fields with various types (text, select, date, etc.)
 - **User Generator** - Helper script to invite sandbox users and create groups
 
 ## What Gets Created
 
 Based on the size bucket you choose, the tool creates:
+
+**Configuration Items:**
+- **Custom Fields** (~0.01x - various field types: text, number, date, select, etc.)
 
 **Project Items:**
 - **Projects** (automatically created based on multipliers)
@@ -152,6 +158,19 @@ python jira_data_generator.py \
   --no-async
 ```
 
+### Resume from Checkpoint
+
+```bash
+# Resume an interrupted run
+python jira_data_generator.py \
+  --url https://mycompany.atlassian.net \
+  --email your.email@company.com \
+  --prefix BIGRUN \
+  --count 1000000 \
+  --size large \
+  --resume
+```
+
 ## Command Line Options
 
 | Option | Required | Description | Default |
@@ -166,19 +185,23 @@ python jira_data_generator.py \
 | `--no-async` | No | Disable async mode (sequential) | `false` |
 | `--dry-run` | No | Preview only, no API calls | `false` |
 | `--verbose` | No | Enable debug logging | `false` |
+| `--resume` | No | Resume from existing checkpoint | `false` |
+| `--no-checkpoint` | No | Disable checkpointing entirely | `false` |
 
 \* Token can also be set via `JIRA_API_TOKEN` environment variable or `.env` file
 
 ## Concurrency & Performance
 
-The tool uses async I/O to make concurrent API requests, significantly speeding up generation of high-volume items like comments, worklogs, and watchers.
+The tool uses async I/O to make concurrent API requests, optimized for 18M+ issue scale.
 
 ### How It Works
 
-- **Projects, Categories, Components, Versions, Properties**: Created sequentially (low volume)
+- **Projects, Categories**: Created sequentially (low volume even at scale)
 - **Issues**: Created via bulk API (50 per call)
+- **Versions, Components, Project Properties**: Created concurrently (high volume at scale: 25.9M versions, 3.8M components at 18M issues)
 - **Comments, Worklogs, Issue Links, Watchers, Attachments, Votes, Issue Properties, Remote Links**: Created concurrently using asyncio
-- **Boards, Sprints, Filters, Dashboards**: Created sequentially (low volume)
+- **Boards**: Created sequentially (requires filter creation first)
+- **Sprints, Filters, Dashboards**: Created concurrently (high volume at scale: 900K sprints at 18M issues)
 - **Rate Limiting**: Shared across all concurrent requests with thread-safe tracking
 
 ### Concurrency Guidelines
@@ -256,6 +279,189 @@ Rate limit hit (1 consecutive). Waiting 30.0s
 ```
 
 The tool will automatically slow down and continue when allowed.
+
+## Checkpointing (Resume Support)
+
+For large-scale data generation (designed for 18M+ issues), the tool automatically saves progress to a checkpoint file. If interrupted, you can resume from where you left off.
+
+### How It Works
+
+1. **Automatic Saving** - Progress saved to `{PREFIX}-checkpoint.json` after each phase
+2. **Resume** - Use `--resume` flag to continue from last checkpoint
+3. **Archive** - On completion, checkpoint renamed to `{run_id}-checkpoint.json`
+
+### Checkpoint File
+
+The checkpoint tracks:
+- Run configuration (URL, prefix, size, target counts)
+- Created projects and their IDs
+- Issue keys created per project
+- Phase completion status (pending/in_progress/complete)
+- Item counts for each phase
+
+### Usage
+
+```bash
+# Start a large run (checkpoint auto-created)
+python jira_data_generator.py \
+  --url https://mycompany.atlassian.net \
+  --email you@company.com \
+  --prefix BIGRUN \
+  --count 1000000 \
+  --size large
+
+# If interrupted (Ctrl+C, error, etc.), resume with:
+python jira_data_generator.py \
+  --url https://mycompany.atlassian.net \
+  --email you@company.com \
+  --prefix BIGRUN \
+  --count 1000000 \
+  --size large \
+  --resume
+
+# Disable checkpointing for small runs
+python jira_data_generator.py ... --no-checkpoint
+```
+
+### Resume Behavior
+
+When resuming:
+- Completed phases are skipped entirely
+- Partial phases continue from last saved count
+- Original run_id is restored (same JQL labels)
+- Issue keys are fetched from Jira if needed
+
+### Checkpoint Warnings
+
+If a checkpoint exists when starting a new run:
+- You'll be prompted to confirm overwriting
+- Use `--resume` to continue instead
+- Delete the checkpoint file to start fresh
+
+## Benchmarking & Time Extrapolation
+
+The tool tracks timing for each phase and provides benchmark summaries with time extrapolations for larger datasets.
+
+### How It Works
+
+1. **Phase Timing** - Each generation phase is timed and logged with items/second rate
+2. **Summary Report** - At completion, a detailed benchmark summary is displayed
+3. **Extrapolation** - Times are extrapolated to show how long 18M issues would take
+
+### Sample Output
+
+```
+============================================================
+BENCHMARK SUMMARY
+============================================================
+Total duration: 3.2 minutes
+Total items created: 1,247
+
+Phase breakdown:
+------------------------------------------------------------
+Phase                         Items     Duration         Rate
+------------------------------------------------------------
+Project Categories                1         0.2s         4.9/s
+Projects                          1         0.3s         3.3/s
+Project Properties               24         0.4s        59.1/s
+Issues                           50        23.1s         2.2/s
+Comments                        240        24.5s         9.8/s
+Worklogs                        364        38.2s         9.5/s
+Issue Links                      15         1.5s        10.0/s
+Watchers                        126        12.8s         9.8/s
+Attachments                     105        35.2s         3.0/s
+Votes                             1         0.1s        10.0/s
+Issue Properties                 45         4.6s         9.8/s
+Remote Links                     29         2.9s        10.0/s
+Boards                            1         0.3s         3.3/s
+Sprints                           4         0.8s         5.0/s
+Filters                           2         0.2s        10.0/s
+Dashboards                        1         0.1s        10.0/s
+------------------------------------------------------------
+
+Key rates for extrapolation:
+  Issues: 2.17/sec (0.46s per issue)
+  Comments: 9.80/sec
+
+Request statistics:
+  Total requests: 1,247
+  Rate limited (429): 23 (1.8%)
+  Errors: 5 (0.4%)
+
+============================================================
+TIME EXTRAPOLATION FOR 18,000,000 ISSUES
+============================================================
+Based on current run: 50 issues
+Scale factor: 360000.0x
+
+Estimated time per phase:
+  Project Categories: 360,000 items @ 4.9/s = 20.4h
+  Projects: 360,000 items @ 3.3/s = 30.3h
+  Issues: 18,000,000 items @ 2.2/s = 96.1d
+  Comments: 86,400,000 items @ 9.8/s = 102.1d
+  ...
+
+------------------------------------------------------------
+TOTAL ESTIMATED TIME: 428 days, 12 hours
+------------------------------------------------------------
+
+Note: Actual time may vary based on:
+  - Rate limiting (may add 20-50% overhead)
+  - Network latency
+  - Jira instance performance
+  - Concurrency settings
+```
+
+### Using Benchmarks
+
+Run a small test (50-100 issues) to get baseline rates, then extrapolate:
+
+```bash
+# Run small benchmark test
+python jira_data_generator.py \
+  --url https://mycompany.atlassian.net \
+  --email you@company.com \
+  --prefix BENCH \
+  --count 100 \
+  --size small
+
+# The output will show:
+# - Per-phase timing and rates
+# - Extrapolation for 18M issues
+```
+
+### Key Metrics
+
+| Metric | Description |
+|--------|-------------|
+| **Items/second** | Average creation rate for each phase |
+| **Seconds/item** | Time per item (useful for planning) |
+| **Scale factor** | Multiplier from test run to target |
+| **Total estimated** | Projected total time for 18M issues |
+| **Total requests** | Number of API requests made |
+| **Rate limited (429)** | Requests that hit rate limits (count and percentage) |
+| **Errors** | Failed requests (count and percentage) |
+
+### Request Statistics
+
+The benchmark summary includes API request statistics to help you understand:
+- **Total requests**: How many API calls were made during the run
+- **Rate limited**: How often Jira's rate limits were hit (429 responses)
+- **Errors**: How many requests failed (non-rate-limit errors)
+
+These stats help you:
+- Tune `--concurrency` settings (high rate limit % = reduce concurrency)
+- Identify connectivity issues (high error % = network problems)
+- Plan capacity for large runs
+
+Note: In `--dry-run` mode, no actual requests are made, so statistics show "(No requests recorded - dry-run mode)".
+
+### Accuracy Notes
+
+- Extrapolations are linear estimates from small runs
+- Actual times typically 20-50% higher due to rate limiting
+- Higher concurrency improves rates but hits limits faster
+- Test with 100-500 issues for more accurate baselines
 
 ## Troubleshooting
 
@@ -352,6 +558,9 @@ Dry run: False
 Planned creation counts:
   Issues: 100
 
+  Configuration items:
+    issue_field: 1
+
   Project items:
     project: 1
     project_category: 1
@@ -376,6 +585,9 @@ Planned creation counts:
   Other items:
     filter: 3
     dashboard: 1
+
+Creating 1 custom fields...
+Created custom field 1/1: PERF Text Field (single line) 1 (textfield)
 
 Creating 1 project categories...
 Created category 1/1: PERF Development 1
@@ -436,16 +648,17 @@ project,0.00249,0.00066,0.00032,0.00001
 
 | Operation | Mode | Reason |
 |-----------|------|--------|
+| Custom Fields | **Async** | Configuration items, created first |
 | Projects | Sequential | Low volume, dependencies |
 | Project Categories | Sequential | Low volume, created before projects |
-| Project Properties | Sequential | Low volume |
+| Project Properties | **Async** | High volume at scale (1.6M at 18M issues) |
 | Issues (bulk) | Sequential | Already optimized (50/call) |
-| Components | Sequential | Low volume |
-| Versions | Sequential | Low volume |
+| Components | **Async** | High volume at scale (3.8M at 18M issues) |
+| Versions | **Async** | Very high volume at scale (25.9M at 18M issues) |
 | Boards | Sequential | Low volume, filter dependency |
-| Sprints | Sequential | Low volume |
-| Filters | Sequential | Low volume |
-| Dashboards | Sequential | Low volume |
+| Sprints | **Async** | High volume at scale (900K at 18M issues) |
+| Filters | **Async** | Medium-high volume at scale |
+| Dashboards | **Async** | Medium volume at scale |
 | Comments | **Async** | High volume |
 | Worklogs | **Async** | High volume |
 | Issue Links | **Async** | Medium-high volume |
@@ -574,7 +787,10 @@ jira-test-data-generator/
 │   ├── issues.py              # Issues, attachments
 │   ├── issue_items.py         # Comments, worklogs, links, watchers, votes, properties, remote links
 │   ├── agile.py               # Boards, sprints
-│   └── filters.py             # Filters, dashboards
+│   ├── filters.py             # Filters, dashboards
+│   ├── custom_fields.py       # Custom fields, contexts, options
+│   ├── checkpoint.py          # Checkpoint management for resume support
+│   └── benchmark.py           # Performance tracking and time extrapolation
 ├── item_type_multipliers.csv  # Multiplier configuration
 ├── requirements.txt           # Python dependencies
 └── CLAUDE.md                  # AI agent documentation
@@ -593,9 +809,11 @@ Feel free to extend this! Some ideas:
 - [x] Filters and dashboards
 - [x] Project categories
 - [x] Project properties
-- [ ] Support for custom fields
-- [ ] Resume from failure
+- [x] Checkpointing / Resume from failure
+- [x] Custom fields (20 types: text, number, date, select, multiselect, etc.)
 - [ ] Progress bar (tqdm)
+- [ ] Jira Service Management (requests, queues, organizations)
+- [ ] Jira Assets (objects, schemas)
 
 ## License
 

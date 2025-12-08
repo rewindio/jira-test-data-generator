@@ -4,10 +4,11 @@ Agile module for boards and sprints.
 Uses the Jira Software Cloud REST API (agile API).
 """
 
+import asyncio
 import random
 import time
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from .base import JiraAPIClient
 
@@ -25,9 +26,10 @@ class AgileGenerator(JiraAPIClient):
         api_token: str,
         prefix: str,
         dry_run: bool = False,
-        concurrency: int = 5
+        concurrency: int = 5,
+        benchmark=None
     ):
-        super().__init__(jira_url, email, api_token, dry_run, concurrency)
+        super().__init__(jira_url, email, api_token, dry_run, concurrency, benchmark)
         self.prefix = prefix
         self.AGILE_API_BASE = f"{self.jira_url}/rest/agile/1.0"
 
@@ -350,6 +352,151 @@ class AgileGenerator(JiraAPIClient):
             sprint_issues = issues_to_assign[start_idx:end_idx]
             added = self.add_issues_to_sprint(sprint_id, sprint_issues)
             total_added += added
+
+        self.logger.info(f"Assigned {total_added} issues to sprints")
+        return total_added
+
+    # ========== ASYNC METHODS ==========
+
+    async def _agile_api_call_async(
+        self,
+        method: str,
+        endpoint: str,
+        data: Optional[Dict] = None,
+        params: Optional[Dict] = None
+    ) -> Tuple[bool, Optional[Dict]]:
+        """Make an async API call to the agile API."""
+        return await self._api_call_async(
+            method=method,
+            endpoint=endpoint,
+            data=data,
+            params=params,
+            base_url=self.AGILE_API_BASE
+        )
+
+    async def create_sprints_async(self, board_ids: List[int], count: int) -> List[Dict]:
+        """Create sprints distributed across boards concurrently.
+
+        Args:
+            board_ids: List of board IDs to create sprints for
+            count: Total number of sprints to create
+
+        Returns:
+            List of created sprint dicts
+        """
+        self.logger.info(f"Creating {count} sprints (concurrency: {self.concurrency})...")
+
+        if not board_ids:
+            self.logger.warning("No boards available for sprint creation")
+            return []
+
+        now = datetime.now()
+
+        # Pre-generate all sprint data
+        tasks = []
+        for i in range(count):
+            board_id = board_ids[i % len(board_ids)]
+            sprint_num = i + 1
+
+            # Create sprints with different time periods
+            if i % 3 == 0:
+                start_date = now - timedelta(weeks=4 + i)
+                end_date = start_date + timedelta(weeks=2)
+                goal = f"Historical sprint {sprint_num}"
+            elif i % 3 == 1:
+                start_date = now - timedelta(weeks=1)
+                end_date = now + timedelta(weeks=1)
+                goal = f"Active sprint {sprint_num}"
+            else:
+                start_date = now + timedelta(weeks=i)
+                end_date = start_date + timedelta(weeks=2)
+                goal = f"Upcoming sprint {sprint_num}"
+
+            sprint_data = {
+                "name": f"{self.prefix} Sprint {sprint_num}",
+                "originBoardId": board_id,
+                "startDate": start_date.strftime('%Y-%m-%dT%H:%M:%S.000+0000'),
+                "endDate": end_date.strftime('%Y-%m-%dT%H:%M:%S.000+0000'),
+                "goal": goal
+            }
+            tasks.append(self._agile_api_call_async('POST', 'sprint', data=sprint_data))
+
+        # Execute with progress tracking
+        sprints = []
+        for i in range(0, len(tasks), self.concurrency * 2):
+            batch = tasks[i:i + self.concurrency * 2]
+            results = await asyncio.gather(*batch, return_exceptions=True)
+            for idx, result in enumerate(results):
+                if isinstance(result, tuple) and result[0] and result[1]:
+                    sprint = result[1]
+                    sprints.append(sprint)
+                    self.created_sprints.append(sprint)
+                elif self.dry_run:
+                    sprint = {
+                        "id": random.randint(1000, 9999),
+                        "name": f"{self.prefix} Sprint {len(sprints) + 1}",
+                        "state": "future",
+                        "originBoardId": board_ids[len(sprints) % len(board_ids)]
+                    }
+                    sprints.append(sprint)
+                    self.created_sprints.append(sprint)
+            self.logger.info(f"Created {len(sprints)}/{count} sprints")
+
+        return sprints
+
+    async def add_issues_to_sprint_async(self, sprint_id: int, issue_keys: List[str]) -> int:
+        """Add issues to a sprint asynchronously."""
+        if not issue_keys:
+            return 0
+
+        self.logger.debug(f"Adding {len(issue_keys)} issues to sprint {sprint_id}...")
+
+        if self.dry_run:
+            return len(issue_keys)
+
+        # Move issues to sprint in batches
+        batch_size = 50
+        tasks = []
+
+        for i in range(0, len(issue_keys), batch_size):
+            batch = issue_keys[i:i + batch_size]
+            data = {"issues": batch}
+            tasks.append(self._agile_api_call_async('POST', f'sprint/{sprint_id}/issue', data=data))
+
+        added = 0
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for idx, result in enumerate(results):
+            if isinstance(result, tuple) and result[0]:
+                batch_start = idx * batch_size
+                batch_end = min(batch_start + batch_size, len(issue_keys))
+                added += batch_end - batch_start
+
+        return added
+
+    async def assign_issues_to_sprints_async(self, sprint_ids: List[int], issue_keys: List[str]) -> int:
+        """Distribute issues across sprints concurrently."""
+        if not sprint_ids or not issue_keys:
+            return 0
+
+        self.logger.info(f"Assigning {len(issue_keys)} issues to {len(sprint_ids)} sprints...")
+
+        # Distribute issues roughly evenly across sprints (70% get assigned)
+        issues_to_assign = issue_keys[:int(len(issue_keys) * 0.7)]
+        issues_per_sprint = max(1, len(issues_to_assign) // len(sprint_ids))
+
+        tasks = []
+        for i, sprint_id in enumerate(sprint_ids):
+            start_idx = i * issues_per_sprint
+            end_idx = start_idx + issues_per_sprint
+            if i == len(sprint_ids) - 1:
+                end_idx = len(issues_to_assign)
+
+            sprint_issues = issues_to_assign[start_idx:end_idx]
+            if sprint_issues:
+                tasks.append(self.add_issues_to_sprint_async(sprint_id, sprint_issues))
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        total_added = sum(r for r in results if isinstance(r, int))
 
         self.logger.info(f"Assigned {total_added} issues to sprints")
         return total_added

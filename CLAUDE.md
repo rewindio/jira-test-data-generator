@@ -14,6 +14,8 @@
 - Unique run ID labeling for easy JQL searching
 - Support for 4 instance size buckets (small/medium/large/xlarge)
 - Modular architecture for maintainability
+- **Checkpointing for resumable large-scale runs** (18M+ issues)
+- **Benchmarking with time extrapolation and request statistics** for planning large runs
 
 **Target User**: DevOps/Engineering teams at Rewind (rewind.com) who need to test Jira backup/restore scenarios with realistic data.
 
@@ -23,7 +25,7 @@
 
 ```
 .
-├── jira_data_generator.py       # Main orchestrator (~350 lines)
+├── jira_data_generator.py       # Main orchestrator (~800 lines)
 ├── jira_user_generator.py       # User/group creation helper (~480 lines)
 ├── generators/                   # Modular generators package
 │   ├── __init__.py              # Package exports
@@ -32,7 +34,10 @@
 │   ├── issues.py                # IssueGenerator (~250 lines)
 │   ├── issue_items.py           # IssueItemsGenerator (~450 lines)
 │   ├── agile.py                 # AgileGenerator (~250 lines)
-│   └── filters.py               # FilterGenerator (~200 lines)
+│   ├── filters.py               # FilterGenerator (~200 lines)
+│   ├── custom_fields.py         # CustomFieldGenerator (~500 lines) - custom fields, contexts, options
+│   ├── checkpoint.py            # CheckpointManager (~450 lines) - resumable runs
+│   └── benchmark.py             # BenchmarkTracker (~400 lines) - timing, request stats, extrapolation
 ├── item_type_multipliers.csv    # Multiplier configuration
 ├── requirements.txt             # Python dependencies
 ├── .env.example                 # API token template
@@ -59,6 +64,9 @@ The codebase uses a modular architecture with specialized generators:
 | `issue_items.py` | `IssueItemsGenerator` | Comments, worklogs, links, watchers, votes, properties, remote links |
 | `agile.py` | `AgileGenerator` | Boards, sprints, sprint issue assignment |
 | `filters.py` | `FilterGenerator` | Saved filters, dashboards |
+| `custom_fields.py` | `CustomFieldGenerator` | Custom fields (20 types), contexts, options |
+| `checkpoint.py` | `CheckpointManager` | Progress tracking, resume support for large runs |
+| `benchmark.py` | `BenchmarkTracker` | Per-phase timing, rates calculation, request statistics, time extrapolation |
 
 ### Core Classes
 
@@ -74,42 +82,89 @@ The codebase uses a modular architecture with specialized generators:
 #### `JiraAPIClient` (base class) - `generators/base.py`
 - **Purpose**: Base class for all generators with shared API functionality
 - **Key Methods**:
-  - `_api_call()`: Synchronous API call with rate limiting
-  - `_api_call_async()`: Async API call with rate limiting
+  - `_api_call()`: Synchronous API call with rate limiting and request tracking
+  - `_api_call_async()`: Async API call with rate limiting and request tracking
+  - `_record_request()`: Record API request in benchmark stats
+  - `_record_rate_limit()`: Record rate limit hit in benchmark stats
+  - `_record_error()`: Record error in benchmark stats
   - `get_current_user_account_id()`: Fetch authenticated user
   - `get_all_users()`: Fetch users for watchers
   - `generate_random_text()`: Generate lorem ipsum text
+- **Constructor Parameters**:
+  - `benchmark`: Optional BenchmarkTracker for request statistics tracking
 
 #### `JiraDataGenerator` (orchestrator) - `jira_data_generator.py`
 - **Purpose**: Orchestrates all generator modules
 - **Key Properties**:
   - `project_gen`, `issue_gen`, `issue_items_gen`, `agile_gen`, `filter_gen`: Generator instances
   - `run_id`: Unique label format `PREFIX-YYYYMMDD-HHMMSS`
+  - `checkpoint`: Optional CheckpointManager for resumable runs
+  - `benchmark`: BenchmarkTracker for timing and request statistics (passed to all generators)
+
+#### `CheckpointManager` - `generators/checkpoint.py`
+- **Purpose**: Track progress and enable resumable data generation for large runs
+- **Key Features**:
+  - JSON-based checkpoint file (`{PREFIX}-checkpoint.json`)
+  - Phase-level progress tracking (pending/in_progress/complete)
+  - Count-based tracking for high-volume items
+  - Atomic file writes (temp file + rename)
+  - Auto-archive on completion to `{run_id}-checkpoint.json`
+- **Key Methods**:
+  - `initialize()`: Create new checkpoint for fresh run
+  - `load()`: Load existing checkpoint for resume
+  - `save()`: Persist current state to file
+  - `is_phase_complete()`: Check if phase can be skipped
+  - `get_remaining_count()`: Calculate items still needed
+  - `finalize()`: Mark run complete, archive checkpoint
+
+#### `BenchmarkTracker` - `generators/benchmark.py`
+- **Purpose**: Track performance metrics and provide time extrapolations for large runs
+- **Key Features**:
+  - Per-phase timing with items/second rate calculation
+  - Request statistics tracking (total, rate limited, errors)
+  - Time extrapolation to 18M issues based on observed rates
+  - JSON export for programmatic analysis
+- **Key Properties**:
+  - `total_requests`: Count of API requests made
+  - `rate_limited_requests`: Count of 429 responses
+  - `error_count`: Count of failed requests (non-429)
+  - `rate_limit_percentage`: Percentage of requests that were rate limited
+  - `error_percentage`: Percentage of requests that failed
+- **Key Methods**:
+  - `start_phase(name, target_count)`: Begin timing a phase
+  - `end_phase(name, items_created)`: End timing, log rate
+  - `record_request()`: Increment request counter
+  - `record_rate_limit()`: Increment rate limit counter
+  - `record_error()`: Increment error counter
+  - `get_summary_report()`: Generate human-readable summary
+  - `format_extrapolation(target, current)`: Generate time estimate for target
+  - `to_dict()`: Export all data as JSON-serializable dict
 
 ### Async vs Sync Operations
 
-The tool uses a hybrid approach:
+The tool uses a hybrid approach optimized for 18M+ issue scale:
 
-| Operation | Mode | Reason |
-|-----------|------|--------|
-| Project Categories | Sequential | Low volume, created before projects |
-| Projects | Sequential | Low volume, dependencies |
-| Project Properties | Sequential | Low volume |
-| Issues (bulk) | Sequential | Already optimized (50/call) |
-| Components | Sequential | Low volume |
-| Versions | Sequential | Low volume |
-| Boards | Sequential | Low volume, filter dependency |
-| Sprints | Sequential | Low volume |
-| Filters | Sequential | Low volume |
-| Dashboards | Sequential | Low volume |
-| Comments | **Async** | High volume |
-| Worklogs | **Async** | High volume |
-| Issue Links | **Async** | Medium-high volume |
-| Watchers | **Async** | Medium-high volume |
-| Attachments | **Async** | High volume |
-| Votes | **Async** | Medium volume |
-| Issue Properties | **Async** | High volume |
-| Remote Links | **Async** | Medium volume |
+| Operation | Mode | Volume at 18M | Reason |
+|-----------|------|---------------|--------|
+| Custom Fields | **Async** | 22K | Configuration items, created first |
+| Project Categories | Sequential | 360 | Low volume, created before projects |
+| Projects | Sequential | 5,760 | Low volume, dependencies |
+| Project Properties | **Async** | 1.6M | High volume at scale |
+| Issues (bulk) | Sequential | 18M | Already optimized (50/call) |
+| Components | **Async** | 3.8M | High volume at scale |
+| Versions | **Async** | 25.9M | Very high volume at scale |
+| Boards | Sequential | 15K | Filter dependency required |
+| Sprints | **Async** | 900K | High volume at scale |
+| Filters | **Async** | 100K | Medium-high volume at scale |
+| Dashboards | **Async** | 16K | Medium volume at scale |
+| Comments | **Async** | 48.4M | Very high volume |
+| Worklogs | **Async** | 4.3M | High volume |
+| Issue Links | **Async** | 4.1M | High volume |
+| Watchers | **Async** | 40.3M | Very high volume |
+| Attachments | **Async** | 27.4M | High volume |
+| Votes | **Async** | 5.4K | Low volume (but async for consistency) |
+| Issue Properties | **Async** | 13.3M | High volume |
+| Remote Links | **Async** | 5.9M | Medium-high volume |
 
 ### Rate Limiting Strategy
 
@@ -199,10 +254,12 @@ project,0.00249,0.00066,0.00032,0.00001
 - Filters (filter) - saved JQL queries
 - Dashboards (dashboard) - with share permissions
 
+**Configuration items** (via `CustomFieldGenerator`):
+- Custom Fields (issue_field) - 20 types with contexts and options
+
 **Not Implemented** (system/configuration items):
 - Workflows, screens, permission schemes
 - Issue types, priorities, resolutions
-- Custom fields
 - These are configuration items that should already exist
 
 ---
@@ -347,6 +404,9 @@ def create_new_items(self, issue_keys: List[str], count: int) -> int:
 | `component` | POST | ProjectGenerator | Create components |
 | `filter` | POST | FilterGenerator | Create filters |
 | `dashboard` | POST | FilterGenerator | Create dashboards |
+| `field` | POST | CustomFieldGenerator | Create custom fields |
+| `field/{id}/context` | GET/POST | CustomFieldGenerator | Get/create field contexts |
+| `field/{id}/context/{id}/option` | POST | CustomFieldGenerator | Create field options |
 | `myself` | GET | JiraAPIClient | Get current user |
 | `users/search` | GET | JiraAPIClient | Search users |
 
@@ -513,8 +573,118 @@ labels = PREFIX-20241204-143022
 | `--no-async` | No | Disable async mode (sequential) | `false` |
 | `--dry-run` | No | Preview only, no API calls | `false` |
 | `--verbose` | No | Enable debug logging | `false` |
+| `--resume` | No | Resume from existing checkpoint | `false` |
+| `--no-checkpoint` | No | Disable checkpointing entirely | `false` |
 
 \* Token can also be set via `JIRA_API_TOKEN` environment variable or `.env` file
+
+---
+
+## Checkpointing System
+
+### Overview
+
+The checkpointing system enables resumable data generation for large-scale runs (designed for 18M+ issues). Progress is automatically saved to a JSON file and can be resumed after interruptions.
+
+### Checkpoint File Format
+
+```json
+{
+  "run_id": "PERF-20241208-143022",
+  "prefix": "PERF",
+  "size": "small",
+  "target_issue_count": 1000000,
+  "started_at": "2024-12-08T14:30:22",
+  "last_updated": "2024-12-08T16:45:00",
+  "jira_url": "https://company.atlassian.net",
+  "async_mode": true,
+  "concurrency": 10,
+  "project_keys": ["PERF1", "PERF2"],
+  "project_ids": {"PERF1": "10001", "PERF2": "10002"},
+  "issue_keys": ["PERF1-1", "PERF1-2", ...],
+  "issues_per_project": {"PERF1": 500000, "PERF2": 450000},
+  "phases": {
+    "projects": {"status": "complete", "target_count": 2, "created_count": 2},
+    "issues": {"status": "in_progress", "target_count": 1000000, "created_count": 950000},
+    "comments": {"status": "pending", "target_count": 4800000, "created_count": 0},
+    ...
+  }
+}
+```
+
+### Phase Tracking
+
+All phases are tracked with status (pending/in_progress/complete) and counts:
+
+| Phase | Tracks |
+|-------|--------|
+| `project_categories` | Category creation |
+| `projects` | Project keys and IDs |
+| `project_properties` | Property count |
+| `issues` | Issue keys, per-project counts |
+| `components` | Component count |
+| `versions` | Version count |
+| `comments` | Comment count |
+| `worklogs` | Worklog count |
+| `issue_links` | Link count |
+| `watchers` | Watcher count |
+| `attachments` | Attachment count |
+| `votes` | Vote count |
+| `issue_properties` | Property count |
+| `remote_links` | Remote link count |
+| `boards` | Board count |
+| `sprints` | Sprint count |
+| `filters` | Filter count |
+| `dashboards` | Dashboard count |
+
+### Usage Examples
+
+```bash
+# Start a new large run (checkpoint auto-created)
+python jira_data_generator.py \
+  --url https://company.atlassian.net \
+  --email user@company.com \
+  --prefix BIGRUN \
+  --count 1000000 \
+  --size large \
+  --concurrency 10
+
+# Resume after interruption
+python jira_data_generator.py \
+  --url https://company.atlassian.net \
+  --email user@company.com \
+  --prefix BIGRUN \
+  --count 1000000 \
+  --size large \
+  --resume
+
+# Disable checkpointing for small runs
+python jira_data_generator.py ... --no-checkpoint
+```
+
+### Resume Behavior
+
+When `--resume` is specified:
+1. Looks for `{PREFIX}-checkpoint.json` in current directory
+2. Validates URL matches (warns if different)
+3. Restores run_id to maintain JQL label consistency
+4. Skips completed phases entirely
+5. For partial phases, calculates remaining items needed
+6. Fetches existing issue keys from Jira if needed
+
+### Checkpoint Lifecycle
+
+1. **Start**: Creates `{PREFIX}-checkpoint.json`
+2. **During run**: Updates after each phase/batch completion
+3. **On interrupt**: Last save preserved for resume
+4. **On completion**: Renames to `{run_id}-checkpoint.json` for archival
+
+### Design Decisions
+
+- **Count-based tracking**: For 18M issues, storing all keys would be ~500MB. Instead, we track counts per project and can reconstruct keys via JQL query on resume.
+- **Phase granularity**: Complete phases are skipped entirely; partial phases continue from last count.
+- **Atomic writes**: Uses temp file + rename to prevent corruption on interrupt.
+- **No item-level tracking for high-volume items**: Comments, worklogs, etc. track only total count (some items may be duplicated on resume, which is acceptable).
 
 ---
 
@@ -636,6 +806,44 @@ python jira_data_generator.py ... --no-async
 
 ## Version History
 
+- **v3.4** (2024-12-08): Custom fields support
+  - Added `CustomFieldGenerator` module for creating custom fields
+  - Supports 20 field types: textfield, textarea, float, date, datetime, select, multiselect, radiobuttons, checkboxes, userpicker, grouppicker, labels, url, project, version, etc.
+  - Automatically creates options for select-type fields
+  - Both sync and async methods available
+  - Created early as configuration items (before projects)
+  - At 18M issues: ~22K custom fields
+
+- **v3.3** (2024-12-08): Expanded async support for 18M+ issue scale
+  - Added async methods for versions, components, project properties
+  - Added async methods for sprints, filters, dashboards
+  - Updated main generator to use async for all high-volume operations
+  - Boards remain sequential (filter dependency required)
+  - Volume analysis: versions (25.9M), components (3.8M), sprints (900K) at 18M scale
+
+- **v3.2** (2024-12-08): Request statistics tracking
+  - Added request statistics to benchmark summary (total requests, rate limited %, errors %)
+  - Added `record_request()`, `record_rate_limit()`, `record_error()` methods to BenchmarkTracker
+  - Integrated request tracking into `JiraAPIClient._api_call()` and `_api_call_async()`
+  - Added `benchmark` parameter to all generator classes
+  - Shows "(No requests recorded - dry-run mode)" in dry-run mode
+  - Updated README, QUICKREF, and CLAUDE.md documentation
+
+- **v3.1** (2024-12-08): Benchmarking and time extrapolation
+  - Added `BenchmarkTracker` class for performance tracking
+  - Per-phase timing with items/second rates
+  - Automatic time extrapolation for 18M issues
+  - Summary report with phase breakdown
+  - Updated README and QUICKREF with benchmarking docs
+
+- **v3.0** (2024-12-08): Checkpointing for resumable large runs
+  - Added `CheckpointManager` for progress tracking
+  - New `--resume` flag to continue interrupted runs
+  - New `--no-checkpoint` flag to disable checkpointing
+  - Phase-level and count-based progress tracking
+  - Atomic checkpoint file writes
+  - Support for 18M+ issue runs with interruption recovery
+
 - **v2.1** (2024-12-08): Project categories and properties
   - Added project categories (organize projects)
   - Added project properties (custom key-value metadata)
@@ -671,5 +879,5 @@ python jira_data_generator.py ... --no-async
 
 ---
 
-**Last Updated**: 2024-12-08
+**Last Updated**: 2024-12-08 (v3.4 - Custom Fields Support)
 **AI Agent Note**: This file is specifically for you. The user-facing docs are in README.md.
