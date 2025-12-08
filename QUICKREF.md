@@ -98,12 +98,12 @@ labels = PREFIX AND created >= startOfDay()
 
 ## Size Buckets Quick Reference
 
-| Size | Use For | Issues | Comments | Worklogs | Attachments | Links |
-|------|---------|--------|----------|----------|-------------|-------|
-| small | Dev/Quick | 1x | 4.8x | 7.3x | 2.1x | 0.3x |
-| medium | Staging | 1x | 4.8x | 1.5x | 1.6x | 0.2x |
-| large | Production | 1x | 2.7x | 0.2x | 1.5x | 0.2x |
-| xlarge | Enterprise | 1x | 0.3x | 0.06x | 0.15x | 0.08x |
+| Size | Use For | Issues | Comments | Worklogs | Attachments | Links | Properties |
+|------|---------|--------|----------|----------|-------------|-------|------------|
+| small | Dev/Quick | 1x | 4.8x | 7.3x | 2.1x | 0.3x | 0.89x |
+| medium | Staging | 1x | 4.8x | 1.5x | 1.6x | 0.2x | 0.80x |
+| large | Production | 1x | 2.7x | 0.2x | 1.5x | 0.2x | 0.74x |
+| xlarge | Enterprise | 1x | 0.3x | 0.06x | 0.15x | 0.08x | 1.05x |
 
 ## Concurrency Quick Reference
 
@@ -198,6 +198,23 @@ you+sandbox1@company.com
 you+sandbox2@company.com
 you+sandbox3@company.com
 ```
+
+---
+
+## What Gets Created
+
+**Project Items:**
+- Projects, Categories, Versions, Components, Properties
+
+**Issue Items:**
+- Issues, Comments, Worklogs, Links, Watchers, Attachments
+- Votes, Issue Properties, Remote Links
+
+**Agile Items:**
+- Boards (Scrum/Kanban), Sprints
+
+**Other:**
+- Filters, Dashboards
 
 ---
 

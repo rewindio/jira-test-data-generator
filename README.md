@@ -19,16 +19,31 @@ A Python tool to generate realistic test data for Jira instances based on produc
 
 Based on the size bucket you choose, the tool creates:
 
+**Project Items:**
 - **Projects** (automatically created based on multipliers)
+- **Project Categories** (~0.0003x - organize projects into categories)
+- **Project Versions** (1.76x for small)
+- **Project Components** (0.49x for small)
+- **Project Properties** (~0.48x - custom key-value metadata on projects)
+
+**Issue Items:**
 - **Issues** (base count you specify)
 - **Comments** (4.8x for small instances, varies by size)
 - **Worklogs** (7.27x for small, decreases for larger)
 - **Issue Links** (~0.3x)
 - **Watchers** (2.51x for small, 3.95x for medium)
 - **Attachments** (2.1x for small, random 1-500KB files)
-- **Project Versions** (1.76x for small)
-- **Project Components** (0.49x for small)
-- And more...
+- **Votes** (~0.003x - votes from authenticated user)
+- **Issue Properties** (~0.89x - custom key-value metadata)
+- **Remote Links** (~0.56x - links to external resources)
+
+**Agile Items:**
+- **Boards** (~0.003x - Scrum and Kanban boards)
+- **Sprints** (~0.07x - with past, current, and future dates)
+
+**Other Items:**
+- **Filters** (~0.02x - saved JQL searches)
+- **Dashboards** (~0.002x - with various share permissions)
 
 Multipliers are loaded from `item_type_multipliers.csv` for easy customization.
 
@@ -160,8 +175,10 @@ The tool uses async I/O to make concurrent API requests, significantly speeding 
 
 ### How It Works
 
-- **Projects, Issues, Components, Versions**: Created sequentially (low volume or already bulk-optimized)
-- **Comments, Worklogs, Issue Links, Watchers, Attachments**: Created concurrently using asyncio
+- **Projects, Categories, Components, Versions, Properties**: Created sequentially (low volume)
+- **Issues**: Created via bulk API (50 per call)
+- **Comments, Worklogs, Issue Links, Watchers, Attachments, Votes, Issue Properties, Remote Links**: Created concurrently using asyncio
+- **Boards, Sprints, Filters, Dashboards**: Created sequentially (low volume)
 - **Rate Limiting**: Shared across all concurrent requests with thread-safe tracking
 
 ### Concurrency Guidelines
@@ -334,16 +351,41 @@ Dry run: False
 
 Planned creation counts:
   Issues: 100
-  project: 1
-  comment: 480
-  issue_link: 30
-  issue_watcher: 251
-  issue_worklog: 727
-  project_component: 49
-  project_version: 176
+
+  Project items:
+    project: 1
+    project_category: 1
+    project_component: 49
+    project_version: 176
+    project_property: 48
+
+  Issue items:
+    comment: 480
+    issue_worklog: 727
+    issue_link: 30
+    issue_watcher: 251
+    issue_attachment: 210
+    issue_vote: 1
+    issue_properties: 89
+    issue_remote_link: 56
+
+  Agile items:
+    board: 1
+    sprint: 7
+
+  Other items:
+    filter: 3
+    dashboard: 1
+
+Creating 1 project categories...
+Created category 1/1: PERF Development 1
 
 Creating 1 projects...
 Created project 1/1: PERF1
+
+Assigning 1 projects to 1 categories...
+
+Creating 48 project properties...
 
 Creating 100 issues in project PERF1...
 Creating 100 issues in batches of 50...
@@ -395,14 +437,23 @@ project,0.00249,0.00066,0.00032,0.00001
 | Operation | Mode | Reason |
 |-----------|------|--------|
 | Projects | Sequential | Low volume, dependencies |
+| Project Categories | Sequential | Low volume, created before projects |
+| Project Properties | Sequential | Low volume |
 | Issues (bulk) | Sequential | Already optimized (50/call) |
 | Components | Sequential | Low volume |
 | Versions | Sequential | Low volume |
+| Boards | Sequential | Low volume, filter dependency |
+| Sprints | Sequential | Low volume |
+| Filters | Sequential | Low volume |
+| Dashboards | Sequential | Low volume |
 | Comments | **Async** | High volume |
 | Worklogs | **Async** | High volume |
 | Issue Links | **Async** | Medium-high volume |
 | Watchers | **Async** | Medium-high volume |
 | Attachments | **Async** | High volume, larger payloads |
+| Votes | **Async** | Medium volume |
+| Issue Properties | **Async** | High volume |
+| Remote Links | **Async** | Medium volume |
 
 ### Error Handling
 
@@ -508,14 +559,41 @@ Your API token needs:
 
 ---
 
+## Project Structure
+
+The codebase is organized into modular generators for maintainability:
+
+```
+jira-test-data-generator/
+├── jira_data_generator.py     # Main orchestrator
+├── jira_user_generator.py     # User/group creation helper
+├── generators/                 # Modular generators
+│   ├── __init__.py
+│   ├── base.py                # API client, rate limiting
+│   ├── projects.py            # Projects, categories, versions, components, properties
+│   ├── issues.py              # Issues, attachments
+│   ├── issue_items.py         # Comments, worklogs, links, watchers, votes, properties, remote links
+│   ├── agile.py               # Boards, sprints
+│   └── filters.py             # Filters, dashboards
+├── item_type_multipliers.csv  # Multiplier configuration
+├── requirements.txt           # Python dependencies
+└── CLAUDE.md                  # AI agent documentation
+```
+
 ## Contributing
 
 Feel free to extend this! Some ideas:
 
 - [x] Add attachment generation
+- [x] Sprint creation
+- [x] Board configuration
+- [x] Issue votes
+- [x] Issue properties
+- [x] Remote links
+- [x] Filters and dashboards
+- [x] Project categories
+- [x] Project properties
 - [ ] Support for custom fields
-- [ ] Sprint creation
-- [ ] Board configuration
 - [ ] Resume from failure
 - [ ] Progress bar (tqdm)
 
