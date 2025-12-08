@@ -187,39 +187,47 @@ class IssueGenerator(JiraAPIClient):
             return True
 
         url = f"{self.jira_url}/rest/api/3/issue/{issue_key}/attachments"
+        max_retries = 5
 
-        try:
-            response = self.session.post(
-                url,
-                files={'file': (filename, content)},
-                headers={'X-Atlassian-Token': 'no-check'},
-                auth=(self.email, self.api_token),
-                timeout=60
-            )
+        for attempt in range(max_retries):
+            try:
+                response = self.session.post(
+                    url,
+                    files={'file': (filename, content)},
+                    headers={'X-Atlassian-Token': 'no-check'},
+                    auth=(self.email, self.api_token),
+                    timeout=60
+                )
 
-            if response.status_code == 429:
-                retry_after = float(response.headers.get('Retry-After', 30))
-                self.logger.warning(f"Rate limited. Waiting {retry_after}s...")
-                time.sleep(retry_after)
-                return self.add_attachment(issue_key, content, filename)
+                if response.status_code == 429:
+                    retry_after = float(response.headers.get('Retry-After', 30))
+                    self.logger.warning(f"Rate limited. Waiting {retry_after}s...")
+                    time.sleep(retry_after)
+                    continue  # Retry within the loop
 
-            response.raise_for_status()
-            return True
+                response.raise_for_status()
+                return True
 
-        except Exception as e:
-            is_expected = False
-            if hasattr(e, 'response') and e.response is not None:
-                try:
-                    error_text = e.response.text.lower()
-                    is_expected = 'already exists' in error_text
-                except Exception:
-                    pass
+            except Exception as e:
+                is_expected = False
+                if hasattr(e, 'response') and e.response is not None:
+                    try:
+                        error_text = e.response.text.lower()
+                        is_expected = 'already exists' in error_text
+                    except Exception:
+                        pass
 
-            if is_expected:
-                self.logger.debug(f"Attachment already exists: {filename}")
-            else:
+                if is_expected:
+                    self.logger.debug(f"Attachment already exists: {filename}")
+                    return False
+
                 self.logger.error(f"Failed to attach {filename} to {issue_key}: {e}")
-            return False
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)
+                    continue
+                return False
+
+        return False
 
     def create_attachments(self, issue_keys: List[str], count: int) -> int:
         """Create attachments on issues"""
@@ -256,38 +264,47 @@ class IssueGenerator(JiraAPIClient):
         if self._semaphore is None:
             self._semaphore = asyncio.Semaphore(self.concurrency)
 
+        max_retries = 5
         async with self._semaphore:
-            try:
-                data = aiohttp.FormData()
-                data.add_field('file', content, filename=filename, content_type='application/octet-stream')
+            for attempt in range(max_retries):
+                # Wait for any global cooldown before making request
+                await self._wait_for_cooldown()
 
-                async with aiohttp.ClientSession(auth=auth) as attachment_session:
-                    async with attachment_session.post(
-                        url,
-                        data=data,
-                        headers={'X-Atlassian-Token': 'no-check'},
-                        timeout=aiohttp.ClientTimeout(total=60)
-                    ) as response:
-                        if response.status == 429:
-                            retry_after = float(response.headers.get('Retry-After', 30))
-                            self.logger.warning(f"Rate limited. Waiting {retry_after}s...")
-                            await asyncio.sleep(retry_after)
-                            return await self.add_attachment_async(issue_key, content, filename)
+                try:
+                    data = aiohttp.FormData()
+                    data.add_field('file', content, filename=filename, content_type='application/octet-stream')
 
-                        if response.status >= 400:
-                            error_text = await response.text()
-                            if 'already exists' not in error_text.lower():
-                                self.logger.error(f"Failed to attach {filename} to {issue_key}: {response.status} - {error_text[:200]}")
-                            return False
+                    async with aiohttp.ClientSession(auth=auth) as attachment_session:
+                        async with attachment_session.post(
+                            url,
+                            data=data,
+                            headers={'X-Atlassian-Token': 'no-check'},
+                            timeout=aiohttp.ClientTimeout(total=60)
+                        ) as response:
+                            if response.status == 429:
+                                delay = await self._handle_rate_limit_async(response.status, dict(response.headers))
+                                await asyncio.sleep(delay)
+                                continue  # Retry within the loop
 
-                        return True
+                            if response.status >= 400:
+                                error_text = await response.text()
+                                if 'already exists' not in error_text.lower():
+                                    self.logger.error(f"Failed to attach {filename} to {issue_key}: {response.status} - {error_text[:200]}")
+                                return False
 
-            except aiohttp.ClientError as e:
-                self.logger.error(f"Failed to attach {filename} to {issue_key}: ClientError - {e}")
-                return False
-            except Exception as e:
-                self.logger.error(f"Failed to attach {filename} to {issue_key}: {type(e).__name__} - {e}")
-                return False
+                            return True
+
+                except aiohttp.ClientError as e:
+                    self.logger.error(f"Failed to attach {filename} to {issue_key}: ClientError - {e}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                    return False
+                except Exception as e:
+                    self.logger.error(f"Failed to attach {filename} to {issue_key}: {type(e).__name__} - {e}")
+                    return False
+
+        return False
 
     async def create_attachments_async(self, issue_keys: List[str], count: int) -> int:
         """Create attachments on issues concurrently"""

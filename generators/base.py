@@ -28,6 +28,8 @@ class RateLimitState:
     max_delay: float = 60.0
     # Lock for thread-safe updates in async context
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+    # Global cooldown - when set, all requests should wait until this time
+    _cooldown_until: float = 0.0
 
 
 class JiraAPIClient:
@@ -247,16 +249,26 @@ class JiraAPIClient:
                     )
                     delay = self.rate_limit.current_delay
 
-                self.logger.warning(
-                    f"Rate limit hit ({self.rate_limit.consecutive_429s} consecutive). "
-                    f"Waiting {delay:.1f}s"
-                )
+                # Set global cooldown so all requests wait
+                self.rate_limit._cooldown_until = time.time() + delay
+
+                self.logger.warning(f"Rate limited. Waiting {delay:.1f}s...")
                 return delay
         elif status < 300:
             async with self.rate_limit._lock:
                 self.rate_limit.consecutive_429s = 0
                 self.rate_limit.current_delay = 1.0
         return 0
+
+    async def _wait_for_cooldown(self) -> None:
+        """Wait if we're in a global cooldown period."""
+        async with self.rate_limit._lock:
+            cooldown_until = self.rate_limit._cooldown_until
+
+        now = time.time()
+        if cooldown_until > now:
+            wait_time = cooldown_until - now
+            await asyncio.sleep(wait_time)
 
     async def _api_call_async(
         self,
@@ -283,6 +295,9 @@ class JiraAPIClient:
 
         async with self._semaphore:
             for attempt in range(max_retries):
+                # Wait for any global cooldown before making request
+                await self._wait_for_cooldown()
+
                 try:
                     self._record_request()
                     async with session.request(method, url, json=data, params=params) as response:
