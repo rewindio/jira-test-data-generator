@@ -256,38 +256,47 @@ class IssueGenerator(JiraAPIClient):
         if self._semaphore is None:
             self._semaphore = asyncio.Semaphore(self.concurrency)
 
+        max_retries = 5
         async with self._semaphore:
-            try:
-                data = aiohttp.FormData()
-                data.add_field('file', content, filename=filename, content_type='application/octet-stream')
+            for attempt in range(max_retries):
+                # Wait for any global cooldown before making request
+                await self._wait_for_cooldown()
 
-                async with aiohttp.ClientSession(auth=auth) as attachment_session:
-                    async with attachment_session.post(
-                        url,
-                        data=data,
-                        headers={'X-Atlassian-Token': 'no-check'},
-                        timeout=aiohttp.ClientTimeout(total=60)
-                    ) as response:
-                        if response.status == 429:
-                            retry_after = float(response.headers.get('Retry-After', 30))
-                            self.logger.warning(f"Rate limited. Waiting {retry_after}s...")
-                            await asyncio.sleep(retry_after)
-                            return await self.add_attachment_async(issue_key, content, filename)
+                try:
+                    data = aiohttp.FormData()
+                    data.add_field('file', content, filename=filename, content_type='application/octet-stream')
 
-                        if response.status >= 400:
-                            error_text = await response.text()
-                            if 'already exists' not in error_text.lower():
-                                self.logger.error(f"Failed to attach {filename} to {issue_key}: {response.status} - {error_text[:200]}")
-                            return False
+                    async with aiohttp.ClientSession(auth=auth) as attachment_session:
+                        async with attachment_session.post(
+                            url,
+                            data=data,
+                            headers={'X-Atlassian-Token': 'no-check'},
+                            timeout=aiohttp.ClientTimeout(total=60)
+                        ) as response:
+                            if response.status == 429:
+                                delay = await self._handle_rate_limit_async(response.status, dict(response.headers))
+                                await asyncio.sleep(delay)
+                                continue  # Retry within the loop
 
-                        return True
+                            if response.status >= 400:
+                                error_text = await response.text()
+                                if 'already exists' not in error_text.lower():
+                                    self.logger.error(f"Failed to attach {filename} to {issue_key}: {response.status} - {error_text[:200]}")
+                                return False
 
-            except aiohttp.ClientError as e:
-                self.logger.error(f"Failed to attach {filename} to {issue_key}: ClientError - {e}")
-                return False
-            except Exception as e:
-                self.logger.error(f"Failed to attach {filename} to {issue_key}: {type(e).__name__} - {e}")
-                return False
+                            return True
+
+                except aiohttp.ClientError as e:
+                    self.logger.error(f"Failed to attach {filename} to {issue_key}: ClientError - {e}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                    return False
+                except Exception as e:
+                    self.logger.error(f"Failed to attach {filename} to {issue_key}: {type(e).__name__} - {e}")
+                    return False
+
+        return False
 
     async def create_attachments_async(self, issue_keys: List[str], count: int) -> int:
         """Create attachments on issues concurrently"""
