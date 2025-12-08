@@ -187,39 +187,47 @@ class IssueGenerator(JiraAPIClient):
             return True
 
         url = f"{self.jira_url}/rest/api/3/issue/{issue_key}/attachments"
+        max_retries = 5
 
-        try:
-            response = self.session.post(
-                url,
-                files={'file': (filename, content)},
-                headers={'X-Atlassian-Token': 'no-check'},
-                auth=(self.email, self.api_token),
-                timeout=60
-            )
+        for attempt in range(max_retries):
+            try:
+                response = self.session.post(
+                    url,
+                    files={'file': (filename, content)},
+                    headers={'X-Atlassian-Token': 'no-check'},
+                    auth=(self.email, self.api_token),
+                    timeout=60
+                )
 
-            if response.status_code == 429:
-                retry_after = float(response.headers.get('Retry-After', 30))
-                self.logger.warning(f"Rate limited. Waiting {retry_after}s...")
-                time.sleep(retry_after)
-                return self.add_attachment(issue_key, content, filename)
+                if response.status_code == 429:
+                    retry_after = float(response.headers.get('Retry-After', 30))
+                    self.logger.warning(f"Rate limited. Waiting {retry_after}s...")
+                    time.sleep(retry_after)
+                    continue  # Retry within the loop
 
-            response.raise_for_status()
-            return True
+                response.raise_for_status()
+                return True
 
-        except Exception as e:
-            is_expected = False
-            if hasattr(e, 'response') and e.response is not None:
-                try:
-                    error_text = e.response.text.lower()
-                    is_expected = 'already exists' in error_text
-                except Exception:
-                    pass
+            except Exception as e:
+                is_expected = False
+                if hasattr(e, 'response') and e.response is not None:
+                    try:
+                        error_text = e.response.text.lower()
+                        is_expected = 'already exists' in error_text
+                    except Exception:
+                        pass
 
-            if is_expected:
-                self.logger.debug(f"Attachment already exists: {filename}")
-            else:
+                if is_expected:
+                    self.logger.debug(f"Attachment already exists: {filename}")
+                    return False
+
                 self.logger.error(f"Failed to attach {filename} to {issue_key}: {e}")
-            return False
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)
+                    continue
+                return False
+
+        return False
 
     def create_attachments(self, issue_keys: List[str], count: int) -> int:
         """Create attachments on issues"""
