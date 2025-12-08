@@ -599,7 +599,7 @@ Feel free to extend this! Some ideas:
 
 ## License
 
-Internal Rewind tool - use for testing purposes only!
+MIT License - see [LICENSE](LICENSE) for details.
 
 ## Support
 
