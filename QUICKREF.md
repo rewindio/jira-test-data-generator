@@ -71,6 +71,29 @@ python jira_data_generator.py \
   --no-async
 ```
 
+### Resume from Checkpoint
+```bash
+# Resume an interrupted large run
+python jira_data_generator.py \
+  --url https://mycompany.atlassian.net \
+  --email you@company.com \
+  --prefix BIGRUN \
+  --count 1000000 \
+  --size large \
+  --resume
+```
+
+### Disable Checkpointing (Small Runs)
+```bash
+python jira_data_generator.py \
+  --url https://mycompany.atlassian.net \
+  --email you@company.com \
+  --prefix QUICK \
+  --count 50 \
+  --size small \
+  --no-checkpoint
+```
+
 ## JQL Search Patterns
 
 ```jql
@@ -131,6 +154,8 @@ labels = PREFIX AND created >= startOfDay()
 | `--verbose` | Show detailed progress |
 | `--concurrency N` | Concurrent requests (default: 5) |
 | `--no-async` | Sequential mode (debugging) |
+| `--resume` | Resume from checkpoint |
+| `--no-checkpoint` | Disable checkpointing |
 | `--size small` | Use small instance multipliers |
 | `--size medium` | Use medium instance multipliers |
 | `--size large` | Use large instance multipliers |
@@ -157,6 +182,83 @@ curl -u "you@company.com:$JIRA_API_TOKEN" \
 # Fallback to sequential mode
 python jira_data_generator.py ... --no-async
 ```
+
+### Checkpoint Issues
+```bash
+# View checkpoint status
+cat PREFIX-checkpoint.json | python -m json.tool
+
+# Delete checkpoint to start fresh
+rm PREFIX-checkpoint.json
+
+# Resume interrupted run
+python jira_data_generator.py ... --resume
+```
+
+---
+
+## Checkpointing Quick Reference
+
+| Scenario | Command |
+|----------|---------|
+| Start large run | Auto-creates `{PREFIX}-checkpoint.json` |
+| Resume after interrupt | Add `--resume` flag |
+| Disable for small runs | Add `--no-checkpoint` |
+| Delete stale checkpoint | `rm PREFIX-checkpoint.json` |
+| View checkpoint | `cat PREFIX-checkpoint.json \| python -m json.tool` |
+
+**Checkpoint tracks:** Custom fields, projects, issues, comments, worklogs, links, watchers, attachments, votes, properties, remote links, boards, sprints, filters, dashboards
+
+---
+
+## Benchmarking Quick Reference
+
+After a run completes, you'll see benchmark output showing:
+- Per-phase timing with items/second rates
+- Total duration and items created
+- Request statistics (total requests, rate limited %, errors %)
+- Time extrapolation for 18M issues
+
+### Run a Benchmark Test
+```bash
+# Small run to get baseline rates
+python jira_data_generator.py \
+  --url https://mycompany.atlassian.net \
+  --email you@company.com \
+  --prefix BENCH \
+  --count 100 \
+  --size small
+```
+
+### Key Rates to Watch
+
+| Phase | Good Rate | Notes |
+|-------|-----------|-------|
+| Issues | 2-5/s | Bulk API, 50 per call |
+| Comments | 8-15/s | Async, high volume |
+| Worklogs | 8-15/s | Async, high volume |
+| Attachments | 2-4/s | Larger payloads |
+
+### Request Statistics
+
+| Metric | What It Means |
+|--------|---------------|
+| Total requests | Number of API calls made |
+| Rate limited (429) | Requests that hit Jira's rate limits |
+| Errors | Failed requests (non-rate-limit) |
+
+**Interpreting stats:**
+- High rate limit % (>5%) → Reduce `--concurrency`
+- High error % (>1%) → Check network/credentials
+- In `--dry-run` mode → Shows "(No requests recorded)"
+
+### Extrapolation Accuracy
+
+| Test Size | Accuracy | Recommendation |
+|-----------|----------|----------------|
+| 25-50 | Low | Quick sanity check |
+| 100-200 | Medium | Good for planning |
+| 500+ | High | Most accurate baseline |
 
 ---
 
@@ -202,6 +304,9 @@ you+sandbox3@company.com
 ---
 
 ## What Gets Created
+
+**Configuration Items:**
+- Custom Fields (20 types: text, number, date, select, multiselect, user picker, etc.)
 
 **Project Items:**
 - Projects, Categories, Versions, Components, Properties

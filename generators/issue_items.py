@@ -24,9 +24,10 @@ class IssueItemsGenerator(JiraAPIClient):
         api_token: str,
         prefix: str,
         dry_run: bool = False,
-        concurrency: int = 5
+        concurrency: int = 5,
+        benchmark=None
     ):
-        super().__init__(jira_url, email, api_token, dry_run, concurrency)
+        super().__init__(jira_url, email, api_token, dry_run, concurrency, benchmark)
         self.prefix = prefix
         self.run_id = f"{prefix}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 

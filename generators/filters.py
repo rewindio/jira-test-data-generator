@@ -4,6 +4,7 @@ Filters and dashboards module.
 Handles creation of saved filters and dashboards.
 """
 
+import asyncio
 import random
 import time
 from datetime import datetime
@@ -22,9 +23,10 @@ class FilterGenerator(JiraAPIClient):
         api_token: str,
         prefix: str,
         dry_run: bool = False,
-        concurrency: int = 5
+        concurrency: int = 5,
+        benchmark=None
     ):
-        super().__init__(jira_url, email, api_token, dry_run, concurrency)
+        super().__init__(jira_url, email, api_token, dry_run, concurrency, benchmark)
         self.prefix = prefix
         self.run_id = f"{prefix}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
@@ -278,3 +280,141 @@ class FilterGenerator(JiraAPIClient):
         if response:
             return response.json()
         return None
+
+    # ========== ASYNC METHODS ==========
+
+    async def create_filters_async(self, project_keys: List[str], count: int) -> List[Dict]:
+        """Create multiple filters with varying JQL queries concurrently.
+
+        Args:
+            project_keys: List of project keys to use in JQL
+            count: Number of filters to create
+
+        Returns:
+            List of created filter dicts
+        """
+        self.logger.info(f"Creating {count} filters (concurrency: {self.concurrency})...")
+
+        jql_templates = [
+            "project = {project} ORDER BY created DESC",
+            "project = {project} AND status = 'To Do'",
+            "project = {project} AND status = 'In Progress'",
+            "project = {project} AND status = 'Done'",
+            "project = {project} AND priority = High",
+            "project = {project} AND created >= -7d",
+            "project = {project} AND updated >= -1d",
+            "project = {project} AND assignee = currentUser()",
+            "project = {project} AND reporter = currentUser()",
+            "project = {project} AND labels = '{prefix}'",
+            "project IN ({projects}) AND type = Task",
+            "project IN ({projects}) AND resolution = Unresolved",
+            "labels = '{run_id}'",
+        ]
+
+        # Pre-generate all filter data
+        tasks = []
+        for i in range(count):
+            project = random.choice(project_keys)
+            template = jql_templates[i % len(jql_templates)]
+
+            jql = template.format(
+                project=project,
+                projects=', '.join(project_keys),
+                prefix=self.prefix,
+                run_id=self.run_id
+            )
+
+            filter_data = {
+                "name": f"{self.prefix} Filter {i + 1}",
+                "jql": jql,
+                "description": f"Test filter - {self.generate_random_text(5, 10)}",
+                "favourite": random.choice([True, False])
+            }
+            tasks.append(self._api_call_async('POST', 'filter', data=filter_data))
+
+        # Execute with progress tracking
+        filters = []
+        for i in range(0, len(tasks), self.concurrency * 2):
+            batch = tasks[i:i + self.concurrency * 2]
+            results = await asyncio.gather(*batch, return_exceptions=True)
+            for result in results:
+                if isinstance(result, tuple) and result[0] and result[1]:
+                    filter_obj = result[1]
+                    filters.append(filter_obj)
+                    self.created_filters.append(filter_obj)
+                elif self.dry_run:
+                    filter_obj = {
+                        "id": str(random.randint(10000, 99999)),
+                        "name": f"{self.prefix} Filter {len(filters) + 1}",
+                        "jql": "project = TEST"
+                    }
+                    filters.append(filter_obj)
+                    self.created_filters.append(filter_obj)
+            self.logger.info(f"Created {len(filters)}/{count} filters")
+
+        return filters
+
+    async def create_dashboards_async(self, count: int) -> List[Dict]:
+        """Create multiple dashboards concurrently.
+
+        Args:
+            count: Number of dashboards to create
+
+        Returns:
+            List of created dashboard dicts
+        """
+        self.logger.info(f"Creating {count} dashboards (concurrency: {self.concurrency})...")
+
+        dashboard_types = [
+            "Overview",
+            "Sprint Progress",
+            "Team Metrics",
+            "Bug Tracker",
+            "Release Status",
+            "Performance",
+            "Quality",
+            "Velocity"
+        ]
+
+        # Pre-generate all dashboard data
+        tasks = []
+        for i in range(count):
+            dashboard_type = dashboard_types[i % len(dashboard_types)]
+            name = f"{self.prefix} {dashboard_type} Dashboard {i + 1}"
+            description = f"Test dashboard for {dashboard_type.lower()} - {self.generate_random_text(5, 10)}"
+
+            # Vary share permissions
+            if i % 3 == 0:
+                share_permissions = []
+            elif i % 3 == 1:
+                share_permissions = [{"type": "authenticated"}]
+            else:
+                share_permissions = [{"type": "global"}]
+
+            dashboard_data = {
+                "name": name,
+                "description": description,
+                "sharePermissions": share_permissions
+            }
+            tasks.append(self._api_call_async('POST', 'dashboard', data=dashboard_data))
+
+        # Execute with progress tracking
+        dashboards = []
+        for i in range(0, len(tasks), self.concurrency * 2):
+            batch = tasks[i:i + self.concurrency * 2]
+            results = await asyncio.gather(*batch, return_exceptions=True)
+            for result in results:
+                if isinstance(result, tuple) and result[0] and result[1]:
+                    dashboard = result[1]
+                    dashboards.append(dashboard)
+                    self.created_dashboards.append(dashboard)
+                elif self.dry_run:
+                    dashboard = {
+                        "id": str(random.randint(10000, 99999)),
+                        "name": f"{self.prefix} Dashboard {len(dashboards) + 1}"
+                    }
+                    dashboards.append(dashboard)
+                    self.created_dashboards.append(dashboard)
+            self.logger.info(f"Created {len(dashboards)}/{count} dashboards")
+
+        return dashboards
