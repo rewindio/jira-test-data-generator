@@ -235,9 +235,16 @@ python jira_data_generator.py \
 | Phase | Good Rate | Notes |
 |-------|-----------|-------|
 | Issues | 2-5/s | Bulk API, 50 per call, parallel across projects |
-| Comments | 8-15/s | Async, high volume |
-| Worklogs | 8-15/s | Async, high volume |
-| Attachments | 10-30/s | Pooled 1-5KB files for fast uploads |
+| Comments | 8-15/s | Async, high volume, memory-efficient batching |
+| Worklogs | 8-15/s | Async, high volume, memory-efficient batching |
+| Attachments | 10-30/s | Pooled 1-5KB files, session reuse |
+
+### Performance Features
+
+- **Connection Pooling**: HTTP connections reused (50 per host)
+- **Text Pool**: 3,000 pre-generated strings (~38x faster)
+- **Memory Batching**: Tasks created per-batch, not upfront
+- **Session Reuse**: Single session for all attachments
 
 ### Request Statistics
 

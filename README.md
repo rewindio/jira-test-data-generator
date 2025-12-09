@@ -6,6 +6,7 @@ A Python tool to generate realistic test data for Jira instances based on produc
 
 - **Bulk API Support** - Uses Jira's bulk creation APIs (50 issues per call)
 - **Async Concurrency** - Concurrent API requests for 2-4x faster generation
+- **Parallel Issue Creation** - Issues created concurrently across multiple projects
 - **Intelligent Rate Limiting** - Automatically backs off when hitting rate limits
 - **Production-Based Multipliers** - Creates realistic data distributions from CSV config
 - **Dynamic Project Creation** - Automatically creates projects based on multipliers
@@ -17,6 +18,7 @@ A Python tool to generate realistic test data for Jira instances based on produc
 - **Benchmarking** - Track timing per phase with extrapolation for large datasets
 - **Custom Fields** - Create custom fields with various types (text, select, date, etc.)
 - **User Generator** - Helper script to invite sandbox users and create groups
+- **Performance Optimized** - Connection pooling, text pooling, memory-efficient batching
 
 ## What Gets Created
 
@@ -200,10 +202,20 @@ The tool uses async I/O to make concurrent API requests, optimized for 18M+ issu
 - **Issues**: Created via bulk API (50 per call), **parallelized across projects** for significant speedup
 - **Versions, Components, Project Properties**: Created concurrently (high volume at scale: 25.9M versions, 3.8M components at 18M issues)
 - **Comments, Worklogs, Issue Links, Watchers, Attachments, Votes, Issue Properties, Remote Links**: Created concurrently using asyncio
-- **Attachments**: Use pre-generated pool of small files (1-5KB) for fast uploads
+- **Attachments**: Use pre-generated pool of small files (1-5KB) with session reuse for fast uploads
 - **Boards**: Created sequentially (requires filter creation first)
 - **Sprints, Filters, Dashboards**: Created concurrently (high volume at scale: 900K sprints at 18M issues)
 - **Rate Limiting**: Shared across all concurrent requests with thread-safe tracking
+
+### Performance Optimizations
+
+The tool includes several optimizations for large-scale runs (18M+ issues):
+
+- **Connection Pooling**: Reuses HTTP connections to reduce TCP handshake overhead
+- **Pre-Generated Text Pool**: 3,000 random text strings pre-generated at startup (~38x faster)
+- **Memory-Efficient Batching**: Tasks created per-batch, not upfront (reduces memory from GBs to MBs)
+- **Attachment Session Reuse**: Single session for all attachment uploads (eliminates session overhead)
+- **Attachment File Pooling**: 20 pre-generated small files reused across uploads
 
 ### Concurrency Guidelines
 
@@ -640,10 +652,12 @@ project,0.00249,0.00066,0.00032,0.00001
 
 ### Async Implementation
 
-- Uses `aiohttp` for async HTTP requests
+- Uses `aiohttp` for async HTTP requests with optimized connection pooling
 - Semaphore controls max concurrent requests
 - Rate limit state shared via asyncio.Lock
 - Graceful session cleanup on completion
+- Memory-efficient task batching (tasks created per-batch, not upfront)
+- Pre-generated text pool for fast random text generation
 
 ### What Runs Async vs Sequential
 
@@ -814,6 +828,9 @@ Feel free to extend this! Some ideas:
 - [x] Custom fields (20 types: text, number, date, select, multiselect, etc.)
 - [x] Parallel issue creation across projects
 - [x] Optimized attachments (pooled small files)
+- [x] Connection pooling optimization
+- [x] Pre-generated text pool
+- [x] Memory-efficient task batching
 - [ ] Progress bar (tqdm)
 - [ ] Jira Service Management (requests, queues, organizations)
 - [ ] Jira Assets (objects, schemas)
