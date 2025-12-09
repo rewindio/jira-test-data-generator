@@ -234,10 +234,10 @@ python jira_data_generator.py \
 
 | Phase | Good Rate | Notes |
 |-------|-----------|-------|
-| Issues | 2-5/s | Bulk API, 50 per call |
+| Issues | 2-5/s | Bulk API, 50 per call, parallel across projects |
 | Comments | 8-15/s | Async, high volume |
 | Worklogs | 8-15/s | Async, high volume |
-| Attachments | 2-4/s | Larger payloads |
+| Attachments | 10-30/s | Pooled 1-5KB files for fast uploads |
 
 ### Request Statistics
 
@@ -312,8 +312,8 @@ you+sandbox3@company.com
 - Projects, Categories, Versions, Components, Properties
 
 **Issue Items:**
-- Issues, Comments, Worklogs, Links, Watchers, Attachments
-- Votes, Issue Properties, Remote Links
+- Issues (parallel across projects), Comments, Worklogs, Links, Watchers
+- Attachments (pooled 1-5KB files), Votes, Issue Properties, Remote Links
 
 **Agile Items:**
 - Boards (Scrum/Kanban), Sprints

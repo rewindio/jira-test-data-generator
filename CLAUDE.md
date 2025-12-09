@@ -6,7 +6,9 @@
 
 **Key Features**:
 - Bulk API operations (50 issues per call)
+- **Parallel issue creation across projects** for significant speedup
 - Async concurrency for high-volume items (comments, worklogs, watchers, votes, properties, remote links)
+- **Optimized attachments** with pre-generated pool of small files (1-5KB)
 - Intelligent rate limit handling with exponential backoff
 - Production-based multipliers loaded from CSV file
 - Dynamic project creation based on multipliers
@@ -60,7 +62,7 @@ The codebase uses a modular architecture with specialized generators:
 |--------|-------|----------------|
 | `base.py` | `JiraAPIClient` | HTTP sessions, rate limiting, base API calls |
 | `projects.py` | `ProjectGenerator` | Projects, categories, versions, components, properties, role management |
-| `issues.py` | `IssueGenerator` | Bulk issue creation, attachments |
+| `issues.py` | `IssueGenerator` | Bulk issue creation (parallel across projects), attachments (pooled) |
 | `issue_items.py` | `IssueItemsGenerator` | Comments, worklogs, links, watchers, votes, properties, remote links |
 | `agile.py` | `AgileGenerator` | Boards, sprints, sprint issue assignment |
 | `filters.py` | `FilterGenerator` | Saved filters, dashboards |
@@ -150,7 +152,7 @@ The tool uses a hybrid approach optimized for 18M+ issue scale:
 | Project Categories | Sequential | 360 | Low volume, created before projects |
 | Projects | Sequential | 5,760 | Low volume, dependencies |
 | Project Properties | **Async** | 1.6M | High volume at scale |
-| Issues (bulk) | Sequential | 18M | Already optimized (50/call) |
+| Issues (bulk) | **Parallel** | 18M | Async across projects (50/call per project) |
 | Components | **Async** | 3.8M | High volume at scale |
 | Versions | **Async** | 25.9M | Very high volume at scale |
 | Boards | Sequential | 15K | Filter dependency required |
@@ -161,7 +163,7 @@ The tool uses a hybrid approach optimized for 18M+ issue scale:
 | Worklogs | **Async** | 4.3M | High volume |
 | Issue Links | **Async** | 4.1M | High volume |
 | Watchers | **Async** | 40.3M | Very high volume |
-| Attachments | **Async** | 27.4M | High volume |
+| Attachments | **Async** | 27.4M | Pooled 1-5KB files for fast uploads |
 | Votes | **Async** | 5.4K | Low volume (but async for consistency) |
 | Issue Properties | **Async** | 13.3M | High volume |
 | Remote Links | **Async** | 5.9M | Medium-high volume |
@@ -806,6 +808,15 @@ python jira_data_generator.py ... --no-async
 
 ## Version History
 
+- **v3.5** (2024-12-09): Parallel issue creation and attachment optimization
+  - Added `create_issues_bulk_async()` method for parallel issue creation across projects
+  - Issues now created concurrently across multiple projects (up to 5 parallel)
+  - Added attachment pooling system with pre-generated 1-5KB files
+  - Reduced attachment size from 1-500KB to 1-5KB (~100x smaller)
+  - Pool of 20 reusable attachments eliminates per-upload content generation
+  - Expected 10-20x speedup for attachment phase
+  - Updated all documentation (README, QUICKREF, CLAUDE.md)
+
 - **v3.4** (2024-12-08): Custom fields support
   - Added `CustomFieldGenerator` module for creating custom fields
   - Supports 20 field types: textfield, textarea, float, date, datetime, select, multiselect, radiobuttons, checkboxes, userpicker, grouppicker, labels, url, project, version, etc.
@@ -879,5 +890,5 @@ python jira_data_generator.py ... --no-async
 
 ---
 
-**Last Updated**: 2024-12-08 (v3.4 - Custom Fields Support)
+**Last Updated**: 2024-12-09 (v3.5 - Parallel Issue Creation and Attachment Optimization)
 **AI Agent Note**: This file is specifically for you. The user-facing docs are in README.md.
