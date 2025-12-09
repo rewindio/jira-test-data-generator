@@ -523,7 +523,12 @@ class JiraDataGenerator:
         num_issues: int,
         counts: Dict[str, int]
     ) -> List[str]:
-        """Create issues distributed across projects with async versions/components."""
+        """Create issues distributed across projects with parallel execution.
+
+        Issues are now created in parallel across all projects for significantly
+        improved throughput. At 18M scale with many projects, this can provide
+        substantial speedup.
+        """
         # Check if issues phase is complete
         if self._is_phase_complete("issues"):
             # Restore issue keys from checkpoint or reconstruct them
@@ -555,41 +560,89 @@ class JiraDataGenerator:
         if self.checkpoint and self.checkpoint.checkpoint:
             all_issue_keys = list(self.checkpoint.checkpoint.issue_keys)
 
-        for idx, project in enumerate(projects):
-            project_key = project['key']
-            project_issue_count = issues_needed.get(project_key, 0)
+        # Filter to projects that still need issues
+        projects_to_process = [
+            p for p in projects
+            if issues_needed.get(p['key'], 0) > 0
+        ]
 
-            if project_issue_count <= 0:
-                self.logger.info(f"Skipping project {project_key} - no issues needed")
-                continue
+        if not projects_to_process:
+            self.logger.info("No projects need issue creation")
+            return all_issue_keys
 
-            # Set project context
-            self.issue_gen.set_project_context(project_key, project['id'])
+        # Determine parallelism level for projects
+        # Use min of: number of projects, concurrency setting, or 5 (reasonable default)
+        max_parallel_projects = min(len(projects_to_process), self.concurrency, 5)
 
-            self.logger.info(f"\nCreating {project_issue_count} issues in project {project_key}...")
-            issue_keys = self.issue_gen.create_issues_bulk(project_issue_count)
+        self.logger.info(f"\nCreating issues in parallel across {len(projects_to_process)} projects "
+                        f"(parallelism: {max_parallel_projects})...")
 
-            if issue_keys:
-                all_issue_keys.extend(issue_keys)
+        # Process projects in parallel batches
+        for batch_start in range(0, len(projects_to_process), max_parallel_projects):
+            batch_projects = projects_to_process[batch_start:batch_start + max_parallel_projects]
 
-                # Update checkpoint with new issues
-                if self.checkpoint:
-                    self.checkpoint.add_issue_keys(issue_keys, project_key)
+            # Create tasks for parallel execution
+            tasks = []
+            for project in batch_projects:
+                project_key = project['key']
+                project_id = project['id']
+                project_issue_count = issues_needed.get(project_key, 0)
 
-                # Create components and versions for this project (async for high volume)
-                if not self._is_phase_complete("components"):
-                    if counts.get('project_component', 0) > 0:
-                        components_per_project = max(1, counts['project_component'] // len(projects))
-                        self.benchmark.start_phase("components", components_per_project)
-                        await self.project_gen.create_components_async(project_key, components_per_project)
-                        self.benchmark.end_phase("components", components_per_project)
+                task = self.issue_gen.create_issues_bulk_async(
+                    count=project_issue_count,
+                    project_key=project_key,
+                    project_id=project_id
+                )
+                tasks.append((project_key, task))
 
-                if not self._is_phase_complete("versions"):
-                    if counts.get('project_version', 0) > 0:
-                        versions_per_project = max(1, counts['project_version'] // len(projects))
-                        self.benchmark.start_phase("versions", versions_per_project)
-                        await self.project_gen.create_versions_async(project_key, versions_per_project)
-                        self.benchmark.end_phase("versions", versions_per_project)
+            # Execute in parallel
+            results = await asyncio.gather(*[t[1] for t in tasks], return_exceptions=True)
+
+            # Process results
+            for (project_key, _), result in zip(tasks, results):
+                if isinstance(result, Exception):
+                    self.logger.error(f"Failed to create issues in {project_key}: {result}")
+                    continue
+
+                issue_keys = result
+                if issue_keys:
+                    all_issue_keys.extend(issue_keys)
+
+                    # Update checkpoint with new issues
+                    if self.checkpoint:
+                        self.checkpoint.add_issue_keys(issue_keys, project_key)
+
+            self.logger.info(f"Batch complete: {len(all_issue_keys)} total issues created so far")
+
+        # Create components and versions for all projects (async for high volume)
+        # These are created after all issues to avoid interleaving with issue creation
+        if not self._is_phase_complete("components"):
+            if counts.get('project_component', 0) > 0:
+                components_per_project = max(1, counts['project_component'] // len(projects))
+                total_components = components_per_project * len(projects)
+                self.benchmark.start_phase("components", total_components)
+
+                component_tasks = []
+                for project in projects:
+                    component_tasks.append(
+                        self.project_gen.create_components_async(project['key'], components_per_project)
+                    )
+                await asyncio.gather(*component_tasks, return_exceptions=True)
+                self.benchmark.end_phase("components", total_components)
+
+        if not self._is_phase_complete("versions"):
+            if counts.get('project_version', 0) > 0:
+                versions_per_project = max(1, counts['project_version'] // len(projects))
+                total_versions = versions_per_project * len(projects)
+                self.benchmark.start_phase("versions", total_versions)
+
+                version_tasks = []
+                for project in projects:
+                    version_tasks.append(
+                        self.project_gen.create_versions_async(project['key'], versions_per_project)
+                    )
+                await asyncio.gather(*version_tasks, return_exceptions=True)
+                self.benchmark.end_phase("versions", total_versions)
 
         # Mark components and versions complete
         self._complete_phase("components")

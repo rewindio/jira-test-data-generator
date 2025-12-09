@@ -38,7 +38,7 @@ Based on the size bucket you choose, the tool creates:
 - **Worklogs** (7.27x for small, decreases for larger)
 - **Issue Links** (~0.3x)
 - **Watchers** (2.51x for small, 3.95x for medium)
-- **Attachments** (2.1x for small, random 1-500KB files)
+- **Attachments** (2.1x for small, pooled 1-5KB files for fast uploads)
 - **Votes** (~0.003x - votes from authenticated user)
 - **Issue Properties** (~0.89x - custom key-value metadata)
 - **Remote Links** (~0.56x - links to external resources)
@@ -197,9 +197,10 @@ The tool uses async I/O to make concurrent API requests, optimized for 18M+ issu
 ### How It Works
 
 - **Projects, Categories**: Created sequentially (low volume even at scale)
-- **Issues**: Created via bulk API (50 per call)
+- **Issues**: Created via bulk API (50 per call), **parallelized across projects** for significant speedup
 - **Versions, Components, Project Properties**: Created concurrently (high volume at scale: 25.9M versions, 3.8M components at 18M issues)
 - **Comments, Worklogs, Issue Links, Watchers, Attachments, Votes, Issue Properties, Remote Links**: Created concurrently using asyncio
+- **Attachments**: Use pre-generated pool of small files (1-5KB) for fast uploads
 - **Boards**: Created sequentially (requires filter creation first)
 - **Sprints, Filters, Dashboards**: Created concurrently (high volume at scale: 900K sprints at 18M issues)
 - **Rate Limiting**: Shared across all concurrent requests with thread-safe tracking
@@ -652,7 +653,7 @@ project,0.00249,0.00066,0.00032,0.00001
 | Projects | Sequential | Low volume, dependencies |
 | Project Categories | Sequential | Low volume, created before projects |
 | Project Properties | **Async** | High volume at scale (1.6M at 18M issues) |
-| Issues (bulk) | Sequential | Already optimized (50/call) |
+| Issues (bulk) | **Parallel** | Async across projects (50/call per project) |
 | Components | **Async** | High volume at scale (3.8M at 18M issues) |
 | Versions | **Async** | Very high volume at scale (25.9M at 18M issues) |
 | Boards | Sequential | Low volume, filter dependency |
@@ -663,7 +664,7 @@ project,0.00249,0.00066,0.00032,0.00001
 | Worklogs | **Async** | High volume |
 | Issue Links | **Async** | Medium-high volume |
 | Watchers | **Async** | Medium-high volume |
-| Attachments | **Async** | High volume, larger payloads |
+| Attachments | **Async** | Pooled small files (1-5KB) for fast uploads |
 | Votes | **Async** | Medium volume |
 | Issue Properties | **Async** | High volume |
 | Remote Links | **Async** | Medium volume |
@@ -811,6 +812,8 @@ Feel free to extend this! Some ideas:
 - [x] Project properties
 - [x] Checkpointing / Resume from failure
 - [x] Custom fields (20 types: text, number, date, select, multiselect, etc.)
+- [x] Parallel issue creation across projects
+- [x] Optimized attachments (pooled small files)
 - [ ] Progress bar (tqdm)
 - [ ] Jira Service Management (requests, queues, organizations)
 - [ ] Jira Assets (objects, schemas)
