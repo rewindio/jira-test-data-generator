@@ -417,6 +417,30 @@ class IssueGenerator(JiraAPIClient):
         self.logger.info(f"Attachments complete: {created} added, {failed} failed")
         return created
 
+    async def _get_attachment_session(self) -> aiohttp.ClientSession:
+        """Get or create a dedicated async session for attachment uploads.
+
+        Attachments need a separate session because they use different headers
+        (X-Atlassian-Token and multipart/form-data) than the JSON API calls.
+        Reusing the session avoids connection overhead for each upload.
+        """
+        if not hasattr(self, '_attachment_session') or self._attachment_session is None or self._attachment_session.closed:
+            auth = aiohttp.BasicAuth(self.email, self.api_token)
+            # Use a connector with higher limits for attachment uploads
+            connector = aiohttp.TCPConnector(limit=50, limit_per_host=20)
+            self._attachment_session = aiohttp.ClientSession(
+                auth=auth,
+                connector=connector,
+                timeout=aiohttp.ClientTimeout(total=60),
+                headers={'X-Atlassian-Token': 'no-check'}
+            )
+        return self._attachment_session
+
+    async def _close_attachment_session(self):
+        """Close the dedicated attachment session."""
+        if hasattr(self, '_attachment_session') and self._attachment_session and not self._attachment_session.closed:
+            await self._attachment_session.close()
+
     async def add_attachment_async(self, issue_key: str, content: bytes, filename: str) -> bool:
         """Add an attachment to an issue asynchronously."""
         if self.dry_run:
@@ -424,11 +448,13 @@ class IssueGenerator(JiraAPIClient):
             return True
 
         url = f"{self.jira_url}/rest/api/3/issue/{issue_key}/attachments"
-        auth = aiohttp.BasicAuth(self.email, self.api_token)
 
         # Ensure semaphore is initialized
         if self._semaphore is None:
             self._semaphore = asyncio.Semaphore(self.concurrency)
+
+        # Get shared attachment session
+        session = await self._get_attachment_session()
 
         max_retries = 5
         async with self._semaphore:
@@ -437,28 +463,23 @@ class IssueGenerator(JiraAPIClient):
                 await self._wait_for_cooldown()
 
                 try:
+                    # Create form data for this upload
                     data = aiohttp.FormData()
                     data.add_field('file', content, filename=filename, content_type='application/octet-stream')
 
-                    async with aiohttp.ClientSession(auth=auth) as attachment_session:
-                        async with attachment_session.post(
-                            url,
-                            data=data,
-                            headers={'X-Atlassian-Token': 'no-check'},
-                            timeout=aiohttp.ClientTimeout(total=60)
-                        ) as response:
-                            if response.status == 429:
-                                delay = await self._handle_rate_limit_async(response.status, dict(response.headers))
-                                await asyncio.sleep(delay)
-                                continue  # Retry within the loop
+                    async with session.post(url, data=data) as response:
+                        if response.status == 429:
+                            delay = await self._handle_rate_limit_async(response.status, dict(response.headers))
+                            await asyncio.sleep(delay)
+                            continue  # Retry within the loop
 
-                            if response.status >= 400:
-                                error_text = await response.text()
-                                if 'already exists' not in error_text.lower():
-                                    self.logger.error(f"Failed to attach {filename} to {issue_key}: {response.status} - {error_text[:200]}")
-                                return False
+                        if response.status >= 400:
+                            error_text = await response.text()
+                            if 'already exists' not in error_text.lower():
+                                self.logger.error(f"Failed to attach {filename} to {issue_key}: {response.status} - {error_text[:200]}")
+                            return False
 
-                            return True
+                        return True
 
                 except aiohttp.ClientError as e:
                     self.logger.error(f"Failed to attach {filename} to {issue_key}: ClientError - {e}")
@@ -473,32 +494,49 @@ class IssueGenerator(JiraAPIClient):
         return False
 
     async def create_attachments_async(self, issue_keys: List[str], count: int) -> int:
-        """Create attachments on issues concurrently using pre-generated pool."""
+        """Create attachments on issues concurrently using pre-generated pool.
+
+        Uses memory-efficient batching to avoid creating all tasks upfront,
+        and reuses a shared session for all uploads.
+        """
         # Initialize pool (logs info about pool)
         self._init_attachment_pool()
 
         self.logger.info(f"Creating {count} attachments (concurrency: {self.concurrency}, using pooled 1-5 KB files)...")
 
-        tasks = []
-        for _ in range(count):
-            issue_key = random.choice(issue_keys)
-            content, filename = self.get_pooled_attachment()
-            tasks.append(self.add_attachment_async(issue_key, content, filename))
-
         created = 0
         failed = 0
-        for i in range(0, len(tasks), self.concurrency * 2):
-            batch = tasks[i:i + self.concurrency * 2]
-            results = await asyncio.gather(*batch, return_exceptions=True)
-            for result in results:
-                if result is True:
-                    created += 1
-                elif isinstance(result, Exception):
-                    self.logger.error(f"Attachment failed with exception: {type(result).__name__} - {result}")
-                    failed += 1
-                else:
-                    failed += 1
-            self.logger.info(f"Created {created}/{count} attachments ({failed} failed)")
+        batch_size = self.concurrency * 2
+
+        try:
+            # Memory-efficient: process in batches instead of creating all tasks upfront
+            for batch_start in range(0, count, batch_size):
+                batch_end = min(batch_start + batch_size, count)
+                current_batch_size = batch_end - batch_start
+
+                # Generate tasks for this batch only
+                tasks = []
+                for _ in range(current_batch_size):
+                    issue_key = random.choice(issue_keys)
+                    content, filename = self.get_pooled_attachment()
+                    tasks.append(self.add_attachment_async(issue_key, content, filename))
+
+                # Execute batch
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                for result in results:
+                    if result is True:
+                        created += 1
+                    elif isinstance(result, Exception):
+                        self.logger.error(f"Attachment failed with exception: {type(result).__name__} - {result}")
+                        failed += 1
+                    else:
+                        failed += 1
+
+                self.logger.info(f"Created {created}/{count} attachments ({failed} failed)")
+
+        finally:
+            # Clean up dedicated attachment session
+            await self._close_attachment_session()
 
         self.logger.info(f"Attachments complete: {created} added, {failed} failed")
         return created

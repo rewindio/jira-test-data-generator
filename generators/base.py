@@ -35,6 +35,24 @@ class RateLimitState:
 class JiraAPIClient:
     """Base class for Jira API interactions with rate limiting and session management."""
 
+    # Pre-generated text pool for high-performance random text generation
+    # Shared across all instances to avoid repeated generation
+    _TEXT_POOL_SIZE = 1000  # Number of pre-generated text strings per size category
+    _text_pool: Optional[Dict[str, List[str]]] = None
+    _text_pool_lock = None  # Will be initialized on first use
+
+    # Lorem ipsum words for text generation
+    _LOREM_WORDS = [
+        'lorem', 'ipsum', 'dolor', 'sit', 'amet', 'consectetur', 'adipiscing', 'elit',
+        'sed', 'do', 'eiusmod', 'tempor', 'incididunt', 'ut', 'labore', 'et', 'dolore',
+        'magna', 'aliqua', 'enim', 'ad', 'minim', 'veniam', 'quis', 'nostrud',
+        'exercitation', 'ullamco', 'laboris', 'nisi', 'aliquip', 'ex', 'ea', 'commodo',
+        'consequat', 'duis', 'aute', 'irure', 'in', 'reprehenderit', 'voluptate',
+        'velit', 'esse', 'cillum', 'fugiat', 'nulla', 'pariatur', 'excepteur', 'sint',
+        'occaecat', 'cupidatat', 'non', 'proident', 'sunt', 'culpa', 'qui', 'officia',
+        'deserunt', 'mollit', 'anim', 'id', 'est', 'laborum'
+    ]
+
     def __init__(
         self,
         jira_url: str,
@@ -59,8 +77,17 @@ class JiraAPIClient:
         self._async_session: Optional[aiohttp.ClientSession] = None
         self._semaphore: Optional[asyncio.Semaphore] = None
 
+        # Initialize text pool on first instance creation
+        self._init_text_pool()
+
     def _create_session(self) -> requests.Session:
-        """Create a requests session with retry logic"""
+        """Create a requests session with retry logic and optimized connection pooling.
+
+        Connection pool settings are tuned for high-throughput API operations:
+        - pool_connections: Number of connection pools to cache (per host)
+        - pool_maxsize: Maximum connections to save in the pool (per host)
+        - pool_block: Whether to block when pool is full (True = wait, False = create new)
+        """
         session = requests.Session()
 
         # Don't retry on 429 - we'll handle that ourselves
@@ -71,7 +98,16 @@ class JiraAPIClient:
             allowed_methods=["GET", "POST", "PUT", "DELETE"]
         )
 
-        adapter = HTTPAdapter(max_retries=retry_strategy)
+        # Optimized connection pooling for high-throughput operations
+        # pool_connections=20: Cache up to 20 different host connection pools
+        # pool_maxsize=50: Keep up to 50 connections per host ready for reuse
+        # This reduces TCP handshake overhead for repeated requests to Jira
+        adapter = HTTPAdapter(
+            max_retries=retry_strategy,
+            pool_connections=20,
+            pool_maxsize=50,
+            pool_block=False  # Don't block, create new connections if pool exhausted
+        )
         session.mount("http://", adapter)
         session.mount("https://", adapter)
 
@@ -208,12 +244,32 @@ class JiraAPIClient:
         return None
 
     async def _get_async_session(self) -> aiohttp.ClientSession:
-        """Get or create async HTTP session"""
+        """Get or create async HTTP session with optimized connection pooling.
+
+        Connection pool settings are tuned for high-throughput async operations:
+        - limit: Total number of simultaneous connections
+        - limit_per_host: Connections per host (matches our concurrency model)
+        - ttl_dns_cache: DNS cache TTL to avoid repeated DNS lookups
+        - enable_cleanup_closed: Clean up closed connections promptly
+        """
         if self._async_session is None or self._async_session.closed:
             auth = aiohttp.BasicAuth(self.email, self.api_token)
             timeout = aiohttp.ClientTimeout(total=30)
+
+            # Optimized TCP connector for high-throughput operations
+            # limit=100: Total connections across all hosts
+            # limit_per_host=50: Connections per host (Jira API)
+            # ttl_dns_cache=300: Cache DNS for 5 minutes
+            connector = aiohttp.TCPConnector(
+                limit=100,
+                limit_per_host=50,
+                ttl_dns_cache=300,
+                enable_cleanup_closed=True
+            )
+
             self._async_session = aiohttp.ClientSession(
                 auth=auth,
+                connector=connector,
                 timeout=timeout,
                 headers={
                     'Accept': 'application/json',
@@ -395,14 +451,86 @@ class JiraAPIClient:
         self.logger.info(f"Found {len(users)} users")
         return users[:max_users]
 
-    @staticmethod
-    def generate_random_text(min_words: int = 5, max_words: int = 20) -> str:
-        """Generate random lorem ipsum style text"""
-        words = [
-            'lorem', 'ipsum', 'dolor', 'sit', 'amet', 'consectetur', 'adipiscing', 'elit',
-            'sed', 'do', 'eiusmod', 'tempor', 'incididunt', 'ut', 'labore', 'et', 'dolore',
-            'magna', 'aliqua', 'enim', 'ad', 'minim', 'veniam', 'quis', 'nostrud',
-            'exercitation', 'ullamco', 'laboris', 'nisi', 'aliquip', 'ex', 'ea', 'commodo'
-        ]
-        num_words = random.randint(min_words, max_words)
-        return ' '.join(random.choices(words, k=num_words)).capitalize()
+    @classmethod
+    def _init_text_pool(cls) -> None:
+        """Initialize the pre-generated text pool.
+
+        Creates pools of random text strings in different size categories
+        that can be quickly retrieved instead of generating on each call.
+        This significantly reduces CPU overhead at scale (millions of items).
+
+        Size categories match common usage patterns:
+        - short (3-10 words): comments, component descriptions
+        - medium (5-15 words): issue descriptions, property descriptions
+        - long (10-30 words): detailed descriptions
+        """
+        if cls._text_pool is not None:
+            return  # Already initialized
+
+        import threading
+        if cls._text_pool_lock is None:
+            cls._text_pool_lock = threading.Lock()
+
+        with cls._text_pool_lock:
+            # Double-check after acquiring lock
+            if cls._text_pool is not None:
+                return
+
+            logging.getLogger(__name__).debug(
+                f"Pre-generating {cls._TEXT_POOL_SIZE * 3} random text strings..."
+            )
+
+            cls._text_pool = {
+                'short': [],   # 3-10 words
+                'medium': [],  # 5-15 words
+                'long': []     # 10-30 words
+            }
+
+            # Generate short texts (3-10 words)
+            for _ in range(cls._TEXT_POOL_SIZE):
+                num_words = random.randint(3, 10)
+                text = ' '.join(random.choices(cls._LOREM_WORDS, k=num_words)).capitalize()
+                cls._text_pool['short'].append(text)
+
+            # Generate medium texts (5-15 words)
+            for _ in range(cls._TEXT_POOL_SIZE):
+                num_words = random.randint(5, 15)
+                text = ' '.join(random.choices(cls._LOREM_WORDS, k=num_words)).capitalize()
+                cls._text_pool['medium'].append(text)
+
+            # Generate long texts (10-30 words)
+            for _ in range(cls._TEXT_POOL_SIZE):
+                num_words = random.randint(10, 30)
+                text = ' '.join(random.choices(cls._LOREM_WORDS, k=num_words)).capitalize()
+                cls._text_pool['long'].append(text)
+
+    @classmethod
+    def generate_random_text(cls, min_words: int = 5, max_words: int = 20) -> str:
+        """Get random lorem ipsum style text from pre-generated pool.
+
+        Uses pre-generated text pools for performance. Falls back to
+        generating on-the-fly if pool isn't initialized (shouldn't happen
+        in normal usage).
+
+        Args:
+            min_words: Minimum word count (used to select pool category)
+            max_words: Maximum word count (used to select pool category)
+
+        Returns:
+            Random text string from the appropriate pool
+        """
+        # Ensure pool is initialized
+        if cls._text_pool is None:
+            cls._init_text_pool()
+
+        # Select pool based on requested size range
+        avg_words = (min_words + max_words) // 2
+
+        if avg_words <= 7:
+            pool = cls._text_pool['short']
+        elif avg_words <= 12:
+            pool = cls._text_pool['medium']
+        else:
+            pool = cls._text_pool['long']
+
+        return random.choice(pool)
