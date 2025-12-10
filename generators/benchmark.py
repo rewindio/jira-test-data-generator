@@ -347,22 +347,27 @@ class BenchmarkTracker:
         lines.append(f"Total items created: {self.total_items_created:,}")
         lines.append("")
         lines.append("Phase breakdown:")
-        lines.append("-" * 80)
-        lines.append(f"{'Phase':<25} {'Items':>10} {'Duration':>10} {'Rate':>12} {'429s':>8} {'Errs':>8}")
-        lines.append("-" * 80)
+        lines.append("-" * 90)
+        lines.append(f"{'Phase':<25} {'Items':>10} {'Duration':>10} {'Rate':>12} {'429s':>12} {'Errs':>8}")
+        lines.append("-" * 90)
 
         for phase_name, metrics in self.phases.items():
             if metrics.items_created > 0:
                 display_name = self.phase_display_names.get(phase_name, phase_name)
-                rate_limited_str = str(metrics.rate_limited) if metrics.rate_limited > 0 else "-"
+                # Calculate 429 percentage based on items (approximation: ~1 request per item)
+                if metrics.rate_limited > 0 and metrics.items_created > 0:
+                    rate_pct = (metrics.rate_limited / metrics.items_created) * 100
+                    rate_limited_str = f"{metrics.rate_limited} ({rate_pct:.1f}%)"
+                else:
+                    rate_limited_str = "-"
                 errors_str = str(metrics.errors) if metrics.errors > 0 else "-"
                 lines.append(
                     f"{display_name:<25} {metrics.items_created:>10,} "
                     f"{metrics.format_duration():>10} {metrics.format_rate():>12} "
-                    f"{rate_limited_str:>8} {errors_str:>8}"
+                    f"{rate_limited_str:>12} {errors_str:>8}"
                 )
 
-        lines.append("-" * 80)
+        lines.append("-" * 90)
 
         # Add key rates for reference
         issue_phase = self.phases.get("issues")
