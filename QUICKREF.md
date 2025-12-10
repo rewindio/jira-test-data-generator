@@ -154,6 +154,7 @@ labels = PREFIX AND created >= startOfDay()
 | `--verbose` | Show detailed progress |
 | `--concurrency N` | Concurrent requests (default: 5) |
 | `--request-delay N` | Delay between requests in seconds (try 0.05-0.1) |
+| `--issues-only` | Only create projects + issues, skip comments/worklogs/etc. |
 | `--no-async` | Sequential mode (debugging) |
 | `--resume` | Resume from checkpoint |
 | `--no-checkpoint` | Disable checkpointing |

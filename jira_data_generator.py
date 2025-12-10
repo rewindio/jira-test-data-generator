@@ -87,7 +87,8 @@ class JiraDataGenerator:
         dry_run: bool = False,
         concurrency: int = 5,
         checkpoint_manager: Optional[CheckpointManager] = None,
-        request_delay: float = 0.0
+        request_delay: float = 0.0,
+        issues_only: bool = False
     ):
         self.jira_url = jira_url.rstrip('/')
         self.email = email
@@ -98,6 +99,7 @@ class JiraDataGenerator:
         self.concurrency = concurrency
         self.checkpoint = checkpoint_manager
         self.request_delay = request_delay
+        self.issues_only = issues_only
 
         self.logger = logging.getLogger(__name__)
 
@@ -141,13 +143,24 @@ class JiraDataGenerator:
         self.custom_field_gen.set_run_id(self.run_id)
 
     def calculate_counts(self, num_issues: int) -> Dict[str, int]:
-        """Calculate item counts based on multipliers and target issue count."""
+        """Calculate item counts based on multipliers and target issue count.
+
+        If issues_only is True, only project and issue counts are calculated;
+        all associated data (comments, worklogs, etc.) is set to 0.
+        """
         multipliers = MULTIPLIERS[self.size_bucket]
         counts = {}
 
+        # Items to include when issues_only is True
+        # These are the minimum required to create issues
+        issues_only_items = {'project', 'issue'}
+
         for item_type, multiplier in multipliers.items():
-            raw_count = num_issues * multiplier
-            counts[item_type] = max(1, math.ceil(raw_count))
+            if self.issues_only and item_type not in issues_only_items:
+                counts[item_type] = 0
+            else:
+                raw_count = num_issues * multiplier
+                counts[item_type] = max(1, math.ceil(raw_count))
 
         return counts
 
@@ -1087,6 +1100,8 @@ class JiraDataGenerator:
         self.logger.info(f"Size bucket: {self.size_bucket}")
         self.logger.info(f"Target issues: {num_issues}")
         self.logger.info(f"Prefix: {self.prefix}")
+        if self.issues_only:
+            self.logger.info("Mode: ISSUES ONLY (skipping associated data)")
         if async_mode:
             self.logger.info(f"Concurrency: {self.concurrency}")
             if self.request_delay > 0:
@@ -1222,6 +1237,8 @@ Checkpointing:
     parser.add_argument('--no-async', action='store_true', help='Disable async mode (use sequential requests)')
     parser.add_argument('--dry-run', action='store_true', help='Show what would be created without creating it')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
+    parser.add_argument('--issues-only', action='store_true',
+                        help='Only create projects and issues, skip all associated data (comments, worklogs, etc.)')
 
     # Checkpoint options
     parser.add_argument('--resume', action='store_true',
@@ -1308,7 +1325,8 @@ Checkpointing:
             dry_run=args.dry_run,
             concurrency=args.concurrency,
             checkpoint_manager=checkpoint_manager,
-            request_delay=args.request_delay
+            request_delay=args.request_delay,
+            issues_only=args.issues_only
         )
 
         if args.no_async:
