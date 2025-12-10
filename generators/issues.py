@@ -31,9 +31,10 @@ class IssueGenerator(JiraAPIClient):
         prefix: str,
         dry_run: bool = False,
         concurrency: int = 5,
-        benchmark=None
+        benchmark=None,
+        request_delay: float = 0.0
     ):
-        super().__init__(jira_url, email, api_token, dry_run, concurrency, benchmark)
+        super().__init__(jira_url, email, api_token, dry_run, concurrency, benchmark, request_delay)
         self.prefix = prefix
 
         # Track created items

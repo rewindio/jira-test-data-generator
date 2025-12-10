@@ -19,6 +19,8 @@ class PhaseMetrics:
     end_time: Optional[float] = None
     items_created: int = 0
     items_target: int = 0
+    rate_limited: int = 0  # Number of 429 responses during this phase
+    errors: int = 0  # Number of errors during this phase
 
     @property
     def duration_seconds(self) -> float:
@@ -79,10 +81,13 @@ class BenchmarkTracker:
         self.overall_end: Optional[float] = None
         self.logger = logging.getLogger(__name__)
 
-        # Request statistics
+        # Request statistics (global)
         self.total_requests: int = 0
         self.rate_limited_requests: int = 0
         self.error_count: int = 0
+
+        # Current active phase for per-phase tracking
+        self._current_phase: Optional[str] = None
 
         # Phase display names for reporting
         self.phase_display_names = {
@@ -121,10 +126,16 @@ class BenchmarkTracker:
     def record_rate_limit(self) -> None:
         """Record a rate-limited request (429 response)."""
         self.rate_limited_requests += 1
+        # Also track per-phase
+        if self._current_phase and self._current_phase in self.phases:
+            self.phases[self._current_phase].rate_limited += 1
 
     def record_error(self) -> None:
         """Record an error (non-429 failure)."""
         self.error_count += 1
+        # Also track per-phase
+        if self._current_phase and self._current_phase in self.phases:
+            self.phases[self._current_phase].errors += 1
 
     @property
     def rate_limit_percentage(self) -> float:
@@ -147,6 +158,7 @@ class BenchmarkTracker:
             phase_name: Name of the phase
             target_count: Target number of items to create
         """
+        self._current_phase = phase_name
         self.phases[phase_name] = PhaseMetrics(
             name=phase_name,
             start_time=time.time(),
@@ -171,6 +183,10 @@ class BenchmarkTracker:
                 f"  {display_name}: {items_created} items in {phase.format_duration()} "
                 f"({phase.format_rate()})"
             )
+
+        # Clear current phase
+        if self._current_phase == phase_name:
+            self._current_phase = None
 
     def get_phase(self, phase_name: str) -> Optional[PhaseMetrics]:
         """Get metrics for a specific phase."""
@@ -331,19 +347,27 @@ class BenchmarkTracker:
         lines.append(f"Total items created: {self.total_items_created:,}")
         lines.append("")
         lines.append("Phase breakdown:")
-        lines.append("-" * 60)
-        lines.append(f"{'Phase':<25} {'Items':>10} {'Duration':>10} {'Rate':>12}")
-        lines.append("-" * 60)
+        lines.append("-" * 90)
+        lines.append(f"{'Phase':<25} {'Items':>10} {'Duration':>10} {'Rate':>12} {'429s':>12} {'Errs':>8}")
+        lines.append("-" * 90)
 
         for phase_name, metrics in self.phases.items():
             if metrics.items_created > 0:
                 display_name = self.phase_display_names.get(phase_name, phase_name)
+                # Calculate 429 percentage based on items (approximation: ~1 request per item)
+                if metrics.rate_limited > 0 and metrics.items_created > 0:
+                    rate_pct = (metrics.rate_limited / metrics.items_created) * 100
+                    rate_limited_str = f"{metrics.rate_limited} ({rate_pct:.1f}%)"
+                else:
+                    rate_limited_str = "-"
+                errors_str = str(metrics.errors) if metrics.errors > 0 else "-"
                 lines.append(
                     f"{display_name:<25} {metrics.items_created:>10,} "
-                    f"{metrics.format_duration():>10} {metrics.format_rate():>12}"
+                    f"{metrics.format_duration():>10} {metrics.format_rate():>12} "
+                    f"{rate_limited_str:>12} {errors_str:>8}"
                 )
 
-        lines.append("-" * 60)
+        lines.append("-" * 90)
 
         # Add key rates for reference
         issue_phase = self.phases.get("issues")
@@ -388,6 +412,8 @@ class BenchmarkTracker:
                     "items_target": m.items_target,
                     "duration_seconds": m.duration_seconds,
                     "items_per_second": m.items_per_second,
+                    "rate_limited": m.rate_limited,
+                    "errors": m.errors,
                 }
                 for name, m in self.phases.items()
             }

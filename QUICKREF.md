@@ -153,6 +153,7 @@ labels = PREFIX AND created >= startOfDay()
 | `--dry-run` | Preview only, don't create |
 | `--verbose` | Show detailed progress |
 | `--concurrency N` | Concurrent requests (default: 5) |
+| `--request-delay N` | Delay between requests in seconds (try 0.05-0.1) |
 | `--no-async` | Sequential mode (debugging) |
 | `--resume` | Resume from checkpoint |
 | `--no-checkpoint` | Disable checkpointing |
@@ -164,7 +165,9 @@ labels = PREFIX AND created >= startOfDay()
 ## Troubleshooting Quick Fixes
 
 ### Rate Limited
-Normal! Tool will auto-retry. If excessive, reduce `--concurrency`.
+Normal! Tool will auto-retry with adaptive throttling. If excessive:
+- Add `--request-delay 0.05` to smooth request rate
+- Or reduce `--concurrency`
 
 ### Auth Error
 ```bash
@@ -215,6 +218,7 @@ python jira_data_generator.py ... --resume
 
 After a run completes, you'll see benchmark output showing:
 - Per-phase timing with items/second rates
+- Per-phase rate limiting (429s) with percentages
 - Total duration and items created
 - Request statistics (total requests, rate limited %, errors %)
 - Time extrapolation for 18M issues
@@ -255,7 +259,8 @@ python jira_data_generator.py \
 | Errors | Failed requests (non-rate-limit) |
 
 **Interpreting stats:**
-- High rate limit % (>5%) → Reduce `--concurrency`
+- High rate limit % (>5%) → Add `--request-delay 0.05` or reduce `--concurrency`
+- Per-phase 429% helps identify which operations hit limits most
 - High error % (>1%) → Check network/credentials
 - In `--dry-run` mode → Shows "(No requests recorded)"
 

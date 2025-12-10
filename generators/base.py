@@ -30,6 +30,11 @@ class RateLimitState:
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     # Global cooldown - when set, all requests should wait until this time
     _cooldown_until: float = 0.0
+    # Adaptive throttling - increases when hitting rate limits
+    adaptive_delay: float = 0.0
+    # Track recent rate limit hits for adaptive throttling
+    recent_429_count: int = 0
+    recent_success_count: int = 0
 
 
 class JiraAPIClient:
@@ -60,7 +65,8 @@ class JiraAPIClient:
         api_token: str,
         dry_run: bool = False,
         concurrency: int = 5,
-        benchmark: Optional[Any] = None
+        benchmark: Optional[Any] = None,
+        request_delay: float = 0.0
     ):
         self.jira_url = jira_url.rstrip('/')
         self.email = email
@@ -68,6 +74,7 @@ class JiraAPIClient:
         self.dry_run = dry_run
         self.concurrency = concurrency
         self.benchmark = benchmark  # Optional BenchmarkTracker for stats
+        self.request_delay = request_delay  # Base delay between requests (seconds)
 
         self.rate_limit = RateLimitState()
         self.session = self._create_session()
@@ -286,11 +293,18 @@ class JiraAPIClient:
             await self._async_session.close()
 
     async def _handle_rate_limit_async(self, status: int, headers: dict) -> float:
-        """Handle rate limit responses in async context. Returns delay if rate limited."""
+        """Handle rate limit responses in async context. Returns delay if rate limited.
+
+        Implements adaptive throttling:
+        - On 429: Increase adaptive_delay to slow down future requests
+        - On success: Gradually decrease adaptive_delay
+        - Adds jitter to prevent thundering herd after cooldown
+        """
         if status == 429:
             self._record_rate_limit()
             async with self.rate_limit._lock:
                 self.rate_limit.consecutive_429s += 1
+                self.rate_limit.recent_429_count += 1
 
                 retry_after = headers.get('Retry-After')
                 if retry_after:
@@ -305,15 +319,40 @@ class JiraAPIClient:
                     )
                     delay = self.rate_limit.current_delay
 
-                # Set global cooldown so all requests wait
-                self.rate_limit._cooldown_until = time.time() + delay
+                # Increase adaptive delay when hitting rate limits
+                # This slows down all future requests to prevent repeated 429s
+                self.rate_limit.adaptive_delay = min(
+                    self.rate_limit.adaptive_delay + 0.1,  # Add 100ms per 429
+                    1.0  # Cap at 1 second
+                )
 
-                self.logger.warning(f"Rate limited. Waiting {delay:.1f}s...")
-                return delay
+                # Add jitter to prevent thundering herd (±20% of delay)
+                jitter = delay * random.uniform(-0.2, 0.2)
+                delay_with_jitter = delay + jitter
+
+                # Set global cooldown so all requests wait
+                self.rate_limit._cooldown_until = time.time() + delay_with_jitter
+
+                self.logger.warning(
+                    f"Rate limited. Waiting {delay_with_jitter:.1f}s "
+                    f"(adaptive delay now {self.rate_limit.adaptive_delay:.2f}s)"
+                )
+                return delay_with_jitter
         elif status < 300:
             async with self.rate_limit._lock:
                 self.rate_limit.consecutive_429s = 0
                 self.rate_limit.current_delay = 1.0
+                self.rate_limit.recent_success_count += 1
+
+                # Gradually reduce adaptive delay on success
+                # Every 10 successes without a 429, reduce by 10ms
+                if self.rate_limit.recent_success_count >= 10:
+                    self.rate_limit.adaptive_delay = max(
+                        0.0,
+                        self.rate_limit.adaptive_delay - 0.01
+                    )
+                    self.rate_limit.recent_success_count = 0
+                    self.rate_limit.recent_429_count = 0
         return 0
 
     async def _wait_for_cooldown(self) -> None:
@@ -325,6 +364,32 @@ class JiraAPIClient:
         if cooldown_until > now:
             wait_time = cooldown_until - now
             await asyncio.sleep(wait_time)
+
+    async def _get_effective_delay(self) -> float:
+        """Get the effective delay between requests (base + adaptive).
+
+        Returns the total delay that should be applied between requests,
+        combining the user-configured base delay with the adaptive delay
+        that increases when rate limits are hit.
+        """
+        async with self.rate_limit._lock:
+            adaptive = self.rate_limit.adaptive_delay
+        return self.request_delay + adaptive
+
+    async def _apply_request_delay(self) -> None:
+        """Apply inter-request delay with jitter to smooth out request rate.
+
+        This helps prevent bursting and reduces rate limit hits by spreading
+        requests over time. The delay includes:
+        - Base request_delay (user-configured)
+        - Adaptive delay (increases when hitting rate limits)
+        - Small jitter (±10%) to prevent synchronized requests
+        """
+        effective_delay = await self._get_effective_delay()
+        if effective_delay > 0:
+            # Add small jitter (±10%) to prevent synchronized bursts
+            jitter = effective_delay * random.uniform(-0.1, 0.1)
+            await asyncio.sleep(effective_delay + jitter)
 
     async def _api_call_async(
         self,
@@ -353,6 +418,9 @@ class JiraAPIClient:
             for attempt in range(max_retries):
                 # Wait for any global cooldown before making request
                 await self._wait_for_cooldown()
+
+                # Apply inter-request delay to smooth out request rate
+                await self._apply_request_delay()
 
                 try:
                     self._record_request()
