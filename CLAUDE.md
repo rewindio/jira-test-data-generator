@@ -129,10 +129,23 @@ The codebase uses a modular architecture with specialized generators:
   - `get_remaining_count()`: Calculate items still needed
   - `finalize()`: Mark run complete, archive checkpoint
 
+#### `PhaseMetrics` (dataclass) - `generators/benchmark.py`
+- **Purpose**: Track metrics for a single generation phase
+- **Fields**:
+  - `name`: Phase name
+  - `start_time`, `end_time`: Timing boundaries
+  - `items_created`, `items_target`: Item counts
+  - `rate_limited`: Count of 429 responses during this phase
+  - `errors`: Count of errors during this phase
+- **Key Properties**:
+  - `duration_seconds`, `items_per_second`, `seconds_per_item`
+  - `format_duration()`, `format_rate()`: Human-readable formatting
+
 #### `BenchmarkTracker` - `generators/benchmark.py`
 - **Purpose**: Track performance metrics and provide time extrapolations for large runs
 - **Key Features**:
   - Per-phase timing with items/second rate calculation
+  - Per-phase rate limit (429) and error tracking with percentages
   - Request statistics tracking (total, rate limited, errors)
   - Time extrapolation to 18M issues based on observed rates
   - JSON export for programmatic analysis
@@ -142,13 +155,14 @@ The codebase uses a modular architecture with specialized generators:
   - `error_count`: Count of failed requests (non-429)
   - `rate_limit_percentage`: Percentage of requests that were rate limited
   - `error_percentage`: Percentage of requests that failed
+  - `_current_phase`: Tracks active phase for per-phase 429/error attribution
 - **Key Methods**:
-  - `start_phase(name, target_count)`: Begin timing a phase
-  - `end_phase(name, items_created)`: End timing, log rate
+  - `start_phase(name, target_count)`: Begin timing a phase (sets `_current_phase`)
+  - `end_phase(name, items_created)`: End timing, log rate (clears `_current_phase`)
   - `record_request()`: Increment request counter
-  - `record_rate_limit()`: Increment rate limit counter
-  - `record_error()`: Increment error counter
-  - `get_summary_report()`: Generate human-readable summary
+  - `record_rate_limit()`: Increment rate limit counter (global + per-phase)
+  - `record_error()`: Increment error counter (global + per-phase)
+  - `get_summary_report()`: Generate human-readable summary with per-phase 429s
   - `format_extrapolation(target, current)`: Generate time estimate for target
   - `to_dict()`: Export all data as JSON-serializable dict
 
@@ -931,6 +945,8 @@ python jira_data_generator.py ... --no-async
   - New methods: `_get_effective_delay()`, `_apply_request_delay()`
   - All async operations now benefit from smoothed request pacing
   - Updated all generator classes to accept `request_delay` parameter
+  - **Per-phase rate limit tracking**: Benchmark summary now shows 429s and errors per phase with percentages
+  - New `PhaseMetrics` fields: `rate_limited`, `errors` for per-phase tracking
 
 - **v3.7** (2024-12-10): Fix dashboard sharing and sprint board filtering
   - Fixed dashboard creation error: Removed `{"type": "global"}` share permission which is disabled on most Jira Cloud instances

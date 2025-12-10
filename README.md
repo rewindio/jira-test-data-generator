@@ -393,26 +393,26 @@ Total duration: 3.2 minutes
 Total items created: 1,247
 
 Phase breakdown:
-------------------------------------------------------------
-Phase                         Items     Duration         Rate
-------------------------------------------------------------
-Project Categories                1         0.2s         4.9/s
-Projects                          1         0.3s         3.3/s
-Project Properties               24         0.4s        59.1/s
-Issues                           50        23.1s         2.2/s
-Comments                        240        24.5s         9.8/s
-Worklogs                        364        38.2s         9.5/s
-Issue Links                      15         1.5s        10.0/s
-Watchers                        126        12.8s         9.8/s
-Attachments                     105        35.2s         3.0/s
-Votes                             1         0.1s        10.0/s
-Issue Properties                 45         4.6s         9.8/s
-Remote Links                     29         2.9s        10.0/s
-Boards                            1         0.3s         3.3/s
-Sprints                           4         0.8s         5.0/s
-Filters                           2         0.2s        10.0/s
-Dashboards                        1         0.1s        10.0/s
-------------------------------------------------------------
+------------------------------------------------------------------------------------------
+Phase                          Items   Duration         Rate         429s     Errs
+------------------------------------------------------------------------------------------
+Project Categories                 1       0.2s        4.9/s            -        -
+Projects                           1       0.3s        3.3/s            -        -
+Project Properties                24       0.4s       59.1/s            -        -
+Issues                            50      23.1s        2.2/s    2 (4.0%)        -
+Comments                         240      24.5s        9.8/s    8 (3.3%)        -
+Worklogs                         364      38.2s        9.5/s   12 (3.3%)        -
+Issue Links                       15       1.5s       10.0/s            -        -
+Watchers                         126      12.8s        9.8/s    3 (2.4%)        -
+Attachments                      105      35.2s        3.0/s    5 (4.8%)        -
+Votes                              1       0.1s       10.0/s            -        -
+Issue Properties                  45       4.6s        9.8/s            -        -
+Remote Links                      29       2.9s       10.0/s            -        -
+Boards                             1       0.3s        3.3/s            -        -
+Sprints                            4       0.8s        5.0/s            -        -
+Filters                            2       0.2s       10.0/s            -        -
+Dashboards                         1       0.1s       10.0/s            -        -
+------------------------------------------------------------------------------------------
 
 Key rates for extrapolation:
   Issues: 2.17/sec (0.46s per issue)
@@ -420,8 +420,8 @@ Key rates for extrapolation:
 
 Request statistics:
   Total requests: 1,247
-  Rate limited (429): 23 (1.8%)
-  Errors: 5 (0.4%)
+  Rate limited (429): 30 (2.4%)
+  Errors: 0 (0.0%)
 
 ============================================================
 TIME EXTRAPOLATION FOR 18,000,000 ISSUES

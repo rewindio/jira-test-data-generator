@@ -218,6 +218,7 @@ python jira_data_generator.py ... --resume
 
 After a run completes, you'll see benchmark output showing:
 - Per-phase timing with items/second rates
+- Per-phase rate limiting (429s) with percentages
 - Total duration and items created
 - Request statistics (total requests, rate limited %, errors %)
 - Time extrapolation for 18M issues
@@ -258,7 +259,8 @@ python jira_data_generator.py \
 | Errors | Failed requests (non-rate-limit) |
 
 **Interpreting stats:**
-- High rate limit % (>5%) → Reduce `--concurrency`
+- High rate limit % (>5%) → Add `--request-delay 0.05` or reduce `--concurrency`
+- Per-phase 429% helps identify which operations hit limits most
 - High error % (>1%) → Check network/credentials
 - In `--dry-run` mode → Shows "(No requests recorded)"
 
