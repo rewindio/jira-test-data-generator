@@ -323,7 +323,7 @@ you+sandbox3@company.com
 - Attachments (pooled 1-5KB files), Votes, Issue Properties, Remote Links
 
 **Agile Items:**
-- Boards (Scrum/Kanban), Sprints
+- Boards (Scrum/Kanban), Sprints (scrum boards only)
 
 **Other:**
 - Filters, Dashboards
