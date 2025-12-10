@@ -704,6 +704,7 @@ labels = PREFIX-20241204-143022
 | `--no-async` | No | Disable async mode (sequential) | `false` |
 | `--dry-run` | No | Preview only, no API calls | `false` |
 | `--verbose` | No | Enable debug logging | `false` |
+| `--issues-only` | No | Only create projects and issues, skip associated data | `false` |
 | `--resume` | No | Resume from existing checkpoint | `false` |
 | `--no-checkpoint` | No | Disable checkpointing entirely | `false` |
 
@@ -936,6 +937,11 @@ python jira_data_generator.py ... --no-async
 ---
 
 ## Version History
+
+- **v3.9** (2024-12-10): Issues-only mode
+  - Added `--issues-only` option to create only projects and issues, skipping all associated data
+  - Useful for quick testing of issue creation performance or scenarios where only issues are needed
+  - When enabled, skips: comments, worklogs, watchers, attachments, votes, properties, remote links, versions, components, categories, boards, sprints, filters, dashboards, custom fields
 
 - **v3.8** (2024-12-10): Adaptive rate limiting and request smoothing
   - Added `--request-delay` option to add base delay between requests (recommended: 0.05-0.1s)

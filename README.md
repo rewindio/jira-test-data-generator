@@ -188,6 +188,7 @@ python jira_data_generator.py \
 | `--no-async` | No | Disable async mode (sequential) | `false` |
 | `--dry-run` | No | Preview only, no API calls | `false` |
 | `--verbose` | No | Enable debug logging | `false` |
+| `--issues-only` | No | Only create projects and issues, skip associated data | `false` |
 | `--resume` | No | Resume from existing checkpoint | `false` |
 | `--no-checkpoint` | No | Disable checkpointing entirely | `false` |
 
