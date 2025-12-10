@@ -47,11 +47,11 @@ Based on the size bucket you choose, the tool creates:
 
 **Agile Items:**
 - **Boards** (~0.003x - Scrum and Kanban boards)
-- **Sprints** (~0.07x - with past, current, and future dates)
+- **Sprints** (~0.07x - created on scrum boards only, with past, current, and future dates)
 
 **Other Items:**
 - **Filters** (~0.02x - saved JQL searches)
-- **Dashboards** (~0.002x - with various share permissions)
+- **Dashboards** (~0.002x - private or authenticated user sharing)
 
 Multipliers are loaded from `item_type_multipliers.csv` for easy customization.
 
@@ -204,7 +204,8 @@ The tool uses async I/O to make concurrent API requests, optimized for 18M+ issu
 - **Comments, Worklogs, Issue Links, Watchers, Attachments, Votes, Issue Properties, Remote Links**: Created concurrently using asyncio
 - **Attachments**: Use pre-generated pool of small files (1-5KB) with session reuse for fast uploads
 - **Boards**: Created sequentially (requires filter creation first)
-- **Sprints, Filters, Dashboards**: Created concurrently (high volume at scale: 900K sprints at 18M issues)
+- **Sprints**: Created concurrently on scrum boards only (kanban boards don't support sprints)
+- **Filters, Dashboards**: Created concurrently
 - **Rate Limiting**: Shared across all concurrent requests with thread-safe tracking
 
 ### Performance Optimizations
@@ -671,9 +672,9 @@ project,0.00249,0.00066,0.00032,0.00001
 | Components | **Async** | High volume at scale (3.8M at 18M issues) |
 | Versions | **Async** | Very high volume at scale (25.9M at 18M issues) |
 | Boards | Sequential | Low volume, filter dependency |
-| Sprints | **Async** | High volume at scale (900K at 18M issues) |
+| Sprints | **Async** | Scrum boards only (kanban doesn't support sprints) |
 | Filters | **Async** | Medium-high volume at scale |
-| Dashboards | **Async** | Medium volume at scale |
+| Dashboards | **Async** | Private or authenticated sharing (global disabled) |
 | Comments | **Async** | High volume |
 | Worklogs | **Async** | High volume |
 | Issue Links | **Async** | Medium-high volume |

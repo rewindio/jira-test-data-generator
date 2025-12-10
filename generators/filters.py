@@ -219,16 +219,11 @@ class FilterGenerator(JiraAPIClient):
             name = f"{self.prefix} {dashboard_type} Dashboard {i + 1}"
             description = f"Test dashboard for {dashboard_type.lower()} - {self.generate_random_text(5, 10)}"
 
-            # Vary share permissions
-            if i % 3 == 0:
-                # Private (default)
+            # Vary share permissions (private or authenticated only - global/public is disabled on most instances)
+            if i % 2 == 0:
                 share_permissions = []
-            elif i % 3 == 1:
-                # Logged-in users
-                share_permissions = [{"type": "authenticated"}]
             else:
-                # Global (anyone)
-                share_permissions = [{"type": "global"}]
+                share_permissions = [{"type": "authenticated"}]
 
             dashboard = self.create_dashboard(
                 name=name,
@@ -383,13 +378,11 @@ class FilterGenerator(JiraAPIClient):
             name = f"{self.prefix} {dashboard_type} Dashboard {i + 1}"
             description = f"Test dashboard for {dashboard_type.lower()} - {self.generate_random_text(5, 10)}"
 
-            # Vary share permissions
-            if i % 3 == 0:
+            # Vary share permissions (private or authenticated only - global/public is disabled on most instances)
+            if i % 2 == 0:
                 share_permissions = []
-            elif i % 3 == 1:
-                share_permissions = [{"type": "authenticated"}]
             else:
-                share_permissions = [{"type": "global"}]
+                share_permissions = [{"type": "authenticated"}]
 
             dashboard_data = {
                 "name": name,

@@ -940,16 +940,20 @@ class JiraDataGenerator:
                 self.benchmark.start_phase("boards", counts['board'])
                 boards = self.agile_gen.create_boards(project_keys, counts['board'])
                 board_ids = [b['id'] for b in boards]
+                # Only scrum boards support sprints
+                scrum_board_ids = [b['id'] for b in boards if b.get('type') == 'scrum']
                 self.benchmark.end_phase("boards", len(boards))
                 if self.checkpoint:
                     self.checkpoint.update_phase_count("boards", len(boards))
                 self._complete_phase("boards")
+        else:
+            scrum_board_ids = []
 
         if not self._is_phase_complete("sprints"):
-            if counts.get('sprint', 0) > 0 and board_ids:
+            if counts.get('sprint', 0) > 0 and scrum_board_ids:
                 self._start_phase("sprints")
                 self.benchmark.start_phase("sprints", counts['sprint'])
-                sprints = self.agile_gen.create_sprints(board_ids, counts['sprint'])
+                sprints = self.agile_gen.create_sprints(scrum_board_ids, counts['sprint'])
                 sprint_ids = [s['id'] for s in sprints]
                 self.benchmark.end_phase("sprints", len(sprints))
                 if self.checkpoint:
@@ -976,17 +980,21 @@ class JiraDataGenerator:
                 self.benchmark.start_phase("boards", counts['board'])
                 boards = self.agile_gen.create_boards(project_keys, counts['board'])
                 board_ids = [b['id'] for b in boards]
+                # Only scrum boards support sprints
+                scrum_board_ids = [b['id'] for b in boards if b.get('type') == 'scrum']
                 self.benchmark.end_phase("boards", len(boards))
                 if self.checkpoint:
                     self.checkpoint.update_phase_count("boards", len(boards))
                 self._complete_phase("boards")
+        else:
+            scrum_board_ids = []
 
         # Sprints can be async (high volume at 18M scale: 900K)
         if not self._is_phase_complete("sprints"):
-            if counts.get('sprint', 0) > 0 and board_ids:
+            if counts.get('sprint', 0) > 0 and scrum_board_ids:
                 self._start_phase("sprints")
                 self.benchmark.start_phase("sprints", counts['sprint'])
-                sprints = await self.agile_gen.create_sprints_async(board_ids, counts['sprint'])
+                sprints = await self.agile_gen.create_sprints_async(scrum_board_ids, counts['sprint'])
                 sprint_ids = [s['id'] for s in sprints]
                 self.benchmark.end_phase("sprints", len(sprints))
                 if self.checkpoint:

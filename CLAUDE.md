@@ -166,9 +166,9 @@ The tool uses a hybrid approach optimized for 18M+ issue scale:
 | Components | **Async** | 3.8M | High volume at scale |
 | Versions | **Async** | 25.9M | Very high volume at scale |
 | Boards | Sequential | 15K | Filter dependency required |
-| Sprints | **Async** | 900K | High volume at scale |
+| Sprints | **Async** | 900K | Scrum boards only (kanban doesn't support sprints) |
 | Filters | **Async** | 100K | Medium-high volume at scale |
-| Dashboards | **Async** | 16K | Medium volume at scale |
+| Dashboards | **Async** | 16K | Private or authenticated sharing (global disabled) |
 | Comments | **Async** | 48.4M | Very high volume |
 | Worklogs | **Async** | 4.3M | High volume |
 | Issue Links | **Async** | 4.1M | High volume |
@@ -915,6 +915,12 @@ python jira_data_generator.py ... --no-async
 
 ## Version History
 
+- **v3.7** (2024-12-10): Fix dashboard sharing and sprint board filtering
+  - Fixed dashboard creation error: Removed `{"type": "global"}` share permission which is disabled on most Jira Cloud instances
+  - Dashboards now alternate between private and authenticated user sharing
+  - Fixed sprint creation error: Sprints are now only created on scrum boards (kanban boards don't support sprints)
+  - Added `scrum_board_ids` filtering in both sync and async agile item creation
+
 - **v3.6** (2024-12-09): Performance optimizations for 18M+ scale
   - **Session reuse for attachments**: Dedicated `aiohttp.ClientSession` reused across all attachment uploads (eliminates ~27M session creation/teardown cycles at 18M scale)
   - **Pre-generated random text pool**: 3,000 pre-generated text strings in 3 size categories (short/medium/long), ~38x faster than generating on-the-fly
@@ -1006,5 +1012,5 @@ python jira_data_generator.py ... --no-async
 
 ---
 
-**Last Updated**: 2024-12-09 (v3.6 - Performance Optimizations for 18M+ Scale)
+**Last Updated**: 2024-12-10 (v3.7 - Fix Dashboard Sharing and Sprint Board Filtering)
 **AI Agent Note**: This file is specifically for you. The user-facing docs are in README.md.
