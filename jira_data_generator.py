@@ -86,7 +86,8 @@ class JiraDataGenerator:
         size_bucket: str = 'small',
         dry_run: bool = False,
         concurrency: int = 5,
-        checkpoint_manager: Optional[CheckpointManager] = None
+        checkpoint_manager: Optional[CheckpointManager] = None,
+        request_delay: float = 0.0
     ):
         self.jira_url = jira_url.rstrip('/')
         self.email = email
@@ -96,6 +97,7 @@ class JiraDataGenerator:
         self.dry_run = dry_run
         self.concurrency = concurrency
         self.checkpoint = checkpoint_manager
+        self.request_delay = request_delay
 
         self.logger = logging.getLogger(__name__)
 
@@ -120,7 +122,8 @@ class JiraDataGenerator:
             'api_token': self.api_token,
             'dry_run': self.dry_run,
             'concurrency': self.concurrency,
-            'benchmark': self.benchmark
+            'benchmark': self.benchmark,
+            'request_delay': self.request_delay
         }
 
         self.project_gen = ProjectGenerator(prefix=self.prefix, **common_args)
@@ -1086,6 +1089,10 @@ class JiraDataGenerator:
         self.logger.info(f"Prefix: {self.prefix}")
         if async_mode:
             self.logger.info(f"Concurrency: {self.concurrency}")
+            if self.request_delay > 0:
+                self.logger.info(f"Request delay: {self.request_delay}s (+ adaptive)")
+            else:
+                self.logger.info(f"Request delay: adaptive only")
         self.logger.info(f"Run ID (for JQL): labels = {self.run_id}")
         self.logger.info(f"Dry run: {self.dry_run}")
         self.logger.info("=" * 60)
@@ -1206,6 +1213,12 @@ Checkpointing:
         default=5,
         help='Number of concurrent API requests (default: 5, increase for faster generation)'
     )
+    parser.add_argument(
+        '--request-delay',
+        type=float,
+        default=0.0,
+        help='Delay between requests in seconds (default: 0). Use 0.05-0.1 to reduce rate limiting.'
+    )
     parser.add_argument('--no-async', action='store_true', help='Disable async mode (use sequential requests)')
     parser.add_argument('--dry-run', action='store_true', help='Show what would be created without creating it')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
@@ -1294,7 +1307,8 @@ Checkpointing:
             size_bucket=args.size,
             dry_run=args.dry_run,
             concurrency=args.concurrency,
-            checkpoint_manager=checkpoint_manager
+            checkpoint_manager=checkpoint_manager,
+            request_delay=args.request_delay
         )
 
         if args.no_async:

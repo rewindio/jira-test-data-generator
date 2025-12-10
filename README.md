@@ -184,6 +184,7 @@ python jira_data_generator.py \
 | `--count` | Yes | Number of issues to create | - |
 | `--size` | No | Instance size bucket | `small` |
 | `--concurrency` | No | Number of concurrent API requests | `5` |
+| `--request-delay` | No | Delay between requests in seconds (0.05-0.1 recommended) | `0` |
 | `--no-async` | No | Disable async mode (sequential) | `false` |
 | `--dry-run` | No | Preview only, no API calls | `false` |
 | `--verbose` | No | Enable debug logging | `false` |
@@ -286,10 +287,30 @@ The tool handles rate limiting intelligently:
 3. **Shared rate limit tracking** across concurrent requests
 4. **Automatic retries** (5 attempts per request)
 5. **Semaphore-based concurrency control**
+6. **Adaptive throttling** - automatically slows down when hitting rate limits
+7. **Jitter on backoff** - prevents thundering herd after cooldown
+
+### Request Delay (Smoothing)
+
+Use `--request-delay` to add a small delay between requests, which smooths out the request rate and reduces rate limit hits:
+
+```bash
+# Add 50ms delay between requests (recommended for heavy rate limiting)
+python jira_data_generator.py ... --request-delay 0.05
+
+# Add 100ms delay for very aggressive rate limiting
+python jira_data_generator.py ... --request-delay 0.1
+```
+
+The effective delay is: `request_delay + adaptive_delay + jitter`
+
+- **request_delay**: Your configured base delay (default: 0)
+- **adaptive_delay**: Automatically increases when hitting 429s, decreases on success (0-1s)
+- **jitter**: ±10% randomization to prevent synchronized bursts
 
 You'll see messages like:
 ```
-Rate limit hit (1 consecutive). Waiting 30.0s
+Rate limited. Waiting 30.0s (adaptive delay now 0.20s)
 ```
 
 The tool will automatically slow down and continue when allowed.

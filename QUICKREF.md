@@ -153,6 +153,7 @@ labels = PREFIX AND created >= startOfDay()
 | `--dry-run` | Preview only, don't create |
 | `--verbose` | Show detailed progress |
 | `--concurrency N` | Concurrent requests (default: 5) |
+| `--request-delay N` | Delay between requests in seconds (try 0.05-0.1) |
 | `--no-async` | Sequential mode (debugging) |
 | `--resume` | Resume from checkpoint |
 | `--no-checkpoint` | Disable checkpointing |
@@ -164,7 +165,9 @@ labels = PREFIX AND created >= startOfDay()
 ## Troubleshooting Quick Fixes
 
 ### Rate Limited
-Normal! Tool will auto-retry. If excessive, reduce `--concurrency`.
+Normal! Tool will auto-retry with adaptive throttling. If excessive:
+- Add `--request-delay 0.05` to smooth request rate
+- Or reduce `--concurrency`
 
 ### Auth Error
 ```bash

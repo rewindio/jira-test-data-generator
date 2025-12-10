@@ -187,8 +187,15 @@ The tool uses a hybrid approach optimized for 18M+ issue scale:
 4. **Max**: Cap at 60s delay
 5. **Thread-safe**: Uses asyncio.Lock for shared state in async context
 
+**Adaptive Throttling** (async only):
+- On 429: Increase `adaptive_delay` by 100ms (caps at 1s)
+- On success: Decrease `adaptive_delay` by 10ms every 10 successes
+- Effective delay = `request_delay` + `adaptive_delay` + jitter (±10%)
+
+**Jitter**: ±20% on rate limit backoff, ±10% on request delay to prevent thundering herd
+
 **Sync Implementation**: `JiraAPIClient._handle_rate_limit()` method
-**Async Implementation**: `JiraAPIClient._handle_rate_limit_async()` method
+**Async Implementation**: `JiraAPIClient._handle_rate_limit_async()` method with adaptive throttling
 
 ### API Call Patterns
 
@@ -679,6 +686,7 @@ labels = PREFIX-20241204-143022
 | `--count` | Yes | Number of issues to create | - |
 | `--size` | No | Instance size bucket | `small` |
 | `--concurrency` | No | Number of concurrent API requests | `5` |
+| `--request-delay` | No | Delay between requests in seconds (try 0.05-0.1) | `0` |
 | `--no-async` | No | Disable async mode (sequential) | `false` |
 | `--dry-run` | No | Preview only, no API calls | `false` |
 | `--verbose` | No | Enable debug logging | `false` |
@@ -915,6 +923,15 @@ python jira_data_generator.py ... --no-async
 
 ## Version History
 
+- **v3.8** (2024-12-10): Adaptive rate limiting and request smoothing
+  - Added `--request-delay` option to add base delay between requests (recommended: 0.05-0.1s)
+  - Implemented adaptive throttling: automatically increases delay when hitting 429s, decreases on success
+  - Added jitter to backoff delays (±20%) and request delays (±10%) to prevent thundering herd
+  - New `RateLimitState` fields: `adaptive_delay`, `recent_429_count`, `recent_success_count`
+  - New methods: `_get_effective_delay()`, `_apply_request_delay()`
+  - All async operations now benefit from smoothed request pacing
+  - Updated all generator classes to accept `request_delay` parameter
+
 - **v3.7** (2024-12-10): Fix dashboard sharing and sprint board filtering
   - Fixed dashboard creation error: Removed `{"type": "global"}` share permission which is disabled on most Jira Cloud instances
   - Dashboards now alternate between private and authenticated user sharing
@@ -1012,5 +1029,5 @@ python jira_data_generator.py ... --no-async
 
 ---
 
-**Last Updated**: 2024-12-10 (v3.7 - Fix Dashboard Sharing and Sprint Board Filtering)
+**Last Updated**: 2024-12-10 (v3.8 - Adaptive Rate Limiting and Request Smoothing)
 **AI Agent Note**: This file is specifically for you. The user-facing docs are in README.md.
