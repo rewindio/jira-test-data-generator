@@ -322,9 +322,21 @@ For large-scale data generation (designed for 18M+ issues), the tool automatical
 
 ### How It Works
 
-1. **Automatic Saving** - Progress saved to `{PREFIX}-checkpoint.json` after each phase
-2. **Resume** - Use `--resume` flag to continue from last checkpoint
-3. **Archive** - On completion, checkpoint renamed to `{run_id}-checkpoint.json`
+1. **Periodic Saving** - High-volume items (issues, comments, watchers, attachments, versions) checkpoint every ~500 items
+2. **Phase Tracking** - Lower-volume items checkpoint at phase completion
+3. **Resume** - Use `--resume` flag to continue from last checkpoint
+4. **Archive** - On completion, checkpoint renamed to `{run_id}-checkpoint.json`
+
+### Checkpoint Granularity
+
+| Item Type | Volume (18M scale) | Checkpoint Frequency | Max Loss |
+|-----------|-------------------|---------------------|----------|
+| Issues | 18M | Every 500 | ~500 |
+| Comments | 48.4M | Every 500 | ~500 |
+| Watchers | 40.3M | Every 500 | ~500 |
+| Attachments | 27.4M | Every 500 | ~500 |
+| Versions | 25.9M | Every 500 | ~500 |
+| Other items | < 10M | Phase completion | Full phase |
 
 ### Checkpoint File
 

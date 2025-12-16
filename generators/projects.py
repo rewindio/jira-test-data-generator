@@ -12,6 +12,11 @@ from typing import Dict, List, Optional
 
 from .base import JiraAPIClient
 
+# Import checkpoint type for type hints (avoid circular import)
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .checkpoint import CheckpointManager
+
 
 class ProjectGenerator(JiraAPIClient):
     """Generates projects, versions, components, categories, and properties for Jira."""
@@ -25,10 +30,12 @@ class ProjectGenerator(JiraAPIClient):
         dry_run: bool = False,
         concurrency: int = 5,
         benchmark=None,
-        request_delay: float = 0.0
+        request_delay: float = 0.0,
+        checkpoint: "CheckpointManager" = None
     ):
         super().__init__(jira_url, email, api_token, dry_run, concurrency, benchmark, request_delay)
         self.prefix = prefix
+        self.checkpoint = checkpoint
         self.run_id = f"{prefix}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
         # Track created items
@@ -39,6 +46,10 @@ class ProjectGenerator(JiraAPIClient):
 
         # Current project context
         self.project_key: Optional[str] = None
+
+        # Counters for checkpoint tracking (used across parallel tasks)
+        self._versions_checkpoint_counter: int = 0
+        self._versions_last_checkpoint: int = 0
 
     def set_run_id(self, run_id: str):
         """Set the run ID (should match the main generator's run ID)."""
@@ -416,6 +427,7 @@ class ProjectGenerator(JiraAPIClient):
         """Create project versions concurrently.
 
         Uses memory-efficient batching to avoid creating all tasks upfront.
+        Checkpoints every 500 items across all parallel calls to minimize data loss.
         """
         self.logger.info(f"Creating {count} versions for project {project_key} (concurrency: {self.concurrency})...")
 
@@ -442,13 +454,22 @@ class ProjectGenerator(JiraAPIClient):
 
             # Execute batch
             results = await asyncio.gather(*tasks, return_exceptions=True)
+            batch_created = 0
             for result in results:
                 if isinstance(result, tuple) and result[0] and result[1]:
                     version_ids.append(result[1].get('id'))
+                    batch_created += 1
                 elif self.dry_run:
                     version_ids.append(f"version-{len(version_ids)}")
+                    batch_created += 1
 
-            self.logger.info(f"Created {len(version_ids)}/{count} versions")
+            # Update shared counter and checkpoint every 500 items
+            self._versions_checkpoint_counter += batch_created
+            if self.checkpoint and self._versions_checkpoint_counter - self._versions_last_checkpoint >= 500:
+                self.checkpoint.update_phase_count("versions", self._versions_checkpoint_counter)
+                self._versions_last_checkpoint = self._versions_checkpoint_counter
+
+            self.logger.info(f"Created {len(version_ids)}/{count} versions for {project_key}")
 
         self.created_versions.extend(version_ids)
         return version_ids
