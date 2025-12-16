@@ -211,7 +211,11 @@ python jira_data_generator.py ... --resume
 | Delete stale checkpoint | `rm PREFIX-checkpoint.json` |
 | View checkpoint | `cat PREFIX-checkpoint.json \| python -m json.tool` |
 
-**Checkpoint tracks:** Custom fields, projects, issues, comments, worklogs, links, watchers, attachments, votes, properties, remote links, boards, sprints, filters, dashboards
+**Periodic checkpointing (every ~500 items):** Issues, comments, watchers, attachments, versions
+
+**Phase-level checkpointing:** Custom fields, projects, worklogs, links, votes, properties, remote links, boards, sprints, filters, dashboards
+
+**Max data loss on crash:** ~500 items per high-volume type (vs millions without periodic checkpointing)
 
 ---
 

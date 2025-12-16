@@ -421,7 +421,11 @@ class CheckpointManager:
             total_issues = sum(self._checkpoint.issues_per_project.values())
             self._checkpoint.phases["issues"].created_count = total_issues
 
-            self.save()
+            # Save periodically (every 500 issues) to balance safety vs performance
+            # At 50 issues/batch, this saves every 10 batches
+            # Max data loss on crash: ~500 issues instead of ~50
+            if total_issues % 500 == 0:
+                self.save()
 
     def get_total_issues_created(self) -> int:
         """Get total number of issues created across all projects."""

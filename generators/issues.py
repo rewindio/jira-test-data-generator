@@ -16,6 +16,11 @@ import aiohttp
 
 from .base import JiraAPIClient
 
+# Import checkpoint type for type hints (avoid circular import)
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .checkpoint import CheckpointManager
+
 
 class IssueGenerator(JiraAPIClient):
     """Generates issues and attachments for Jira."""
@@ -32,10 +37,12 @@ class IssueGenerator(JiraAPIClient):
         dry_run: bool = False,
         concurrency: int = 5,
         benchmark=None,
-        request_delay: float = 0.0
+        request_delay: float = 0.0,
+        checkpoint: "CheckpointManager" = None
     ):
         super().__init__(jira_url, email, api_token, dry_run, concurrency, benchmark, request_delay)
         self.prefix = prefix
+        self.checkpoint = checkpoint
 
         # Track created items
         self.created_issues: List[str] = []
@@ -75,7 +82,10 @@ class IssueGenerator(JiraAPIClient):
             return None
 
     def create_issues_bulk(self, count: int) -> List[str]:
-        """Create issues in bulk batches."""
+        """Create issues in bulk batches.
+
+        Checkpoints after each 50-issue batch to minimize data loss on interruption.
+        """
         self.logger.info(f"Creating {count} issues in batches of {self.BULK_CREATE_LIMIT}...")
 
         project_id = self.get_project_id()
@@ -117,10 +127,11 @@ class IssueGenerator(JiraAPIClient):
                 }
                 issues_data["issueUpdates"].append(issue_data)
 
+            batch_keys = []
             if self.dry_run:
                 self.logger.info(f"DRY RUN: Would create batch of {batch_size} issues")
                 for i in range(batch_size):
-                    issue_keys.append(f"{self.project_key}-{batch_start + i + 1}")
+                    batch_keys.append(f"{self.project_key}-{batch_start + i + 1}")
             else:
                 self.logger.debug(f"Bulk create payload: {issues_data}")
                 response = self._api_call('POST', 'issue/bulk', data=issues_data)
@@ -131,8 +142,15 @@ class IssueGenerator(JiraAPIClient):
                     for issue in created:
                         key = issue.get('key')
                         if key:
-                            issue_keys.append(key)
+                            batch_keys.append(key)
                             self.logger.info(f"Created issue: {key}")
+
+            # Add batch keys to total
+            issue_keys.extend(batch_keys)
+
+            # Checkpoint after each batch to minimize data loss on interruption
+            if batch_keys and self.checkpoint and self.project_key:
+                self.checkpoint.add_issue_keys(batch_keys, self.project_key)
 
             if batch_start + batch_size < count:
                 time.sleep(0.5)
@@ -144,6 +162,7 @@ class IssueGenerator(JiraAPIClient):
         """Create issues in bulk batches asynchronously.
 
         This method is designed for parallel execution across multiple projects.
+        Checkpoints after each 50-issue batch to minimize data loss on interruption.
 
         Args:
             count: Number of issues to create
@@ -195,10 +214,11 @@ class IssueGenerator(JiraAPIClient):
                 }
                 issues_data["issueUpdates"].append(issue_data)
 
+            batch_keys = []
             if self.dry_run:
                 self.logger.debug(f"DRY RUN: Would create batch of {batch_size} issues in {project_key}")
                 for i in range(batch_size):
-                    issue_keys.append(f"{project_key}-{batch_start + i + 1}")
+                    batch_keys.append(f"{project_key}-{batch_start + i + 1}")
             else:
                 success, result = await self._api_call_async('POST', 'issue/bulk', data=issues_data)
 
@@ -207,7 +227,14 @@ class IssueGenerator(JiraAPIClient):
                     for issue in created:
                         key = issue.get('key')
                         if key:
-                            issue_keys.append(key)
+                            batch_keys.append(key)
+
+            # Add batch keys to total
+            issue_keys.extend(batch_keys)
+
+            # Checkpoint after each batch to minimize data loss on interruption
+            if batch_keys and self.checkpoint:
+                self.checkpoint.add_issue_keys(batch_keys, project_key)
 
             batches_created += 1
             if batches_created % 10 == 0 or batches_created == total_batches:
@@ -494,11 +521,17 @@ class IssueGenerator(JiraAPIClient):
 
         return False
 
-    async def create_attachments_async(self, issue_keys: List[str], count: int) -> int:
+    async def create_attachments_async(self, issue_keys: List[str], count: int, start_count: int = 0) -> int:
         """Create attachments on issues concurrently using pre-generated pool.
 
         Uses memory-efficient batching to avoid creating all tasks upfront,
         and reuses a shared session for all uploads.
+        Checkpoints every 500 items to minimize data loss on interruption.
+
+        Args:
+            issue_keys: List of issue keys to add attachments to
+            count: Number of attachments to create
+            start_count: Starting count for checkpoint tracking (for resume)
         """
         # Initialize pool (logs info about pool)
         self._init_attachment_pool()
@@ -507,7 +540,9 @@ class IssueGenerator(JiraAPIClient):
 
         created = 0
         failed = 0
+        total_created = start_count  # Track total for checkpoint
         batch_size = self.concurrency * 2
+        last_checkpoint = start_count
 
         try:
             # Memory-efficient: process in batches instead of creating all tasks upfront
@@ -527,11 +562,17 @@ class IssueGenerator(JiraAPIClient):
                 for result in results:
                     if result is True:
                         created += 1
+                        total_created += 1
                     elif isinstance(result, Exception):
                         self.logger.error(f"Attachment failed with exception: {type(result).__name__} - {result}")
                         failed += 1
                     else:
                         failed += 1
+
+                # Checkpoint every 500 items
+                if self.checkpoint and total_created - last_checkpoint >= 500:
+                    self.checkpoint.update_phase_count("attachments", total_created)
+                    last_checkpoint = total_created
 
                 self.logger.info(f"Created {created}/{count} attachments ({failed} failed)")
 

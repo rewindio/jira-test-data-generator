@@ -813,6 +813,7 @@ When `--resume` is specified:
 
 ### Design Decisions
 
+- **Periodic checkpointing for high-volume items**: Issues, comments, watchers, attachments, and versions all checkpoint every ~500 items instead of only at phase completion. This balances safety vs performance - max data loss is ~500 items per type instead of potentially millions, with reasonable disk write overhead.
 - **Count-based tracking**: For 18M issues, storing all keys would be ~500MB. Instead, we track counts per project and can reconstruct keys via JQL query on resume.
 - **Phase granularity**: Complete phases are skipped entirely; partial phases continue from last count.
 - **Atomic writes**: Uses temp file + rename to prevent corruption on interrupt.
@@ -938,6 +939,17 @@ python jira_data_generator.py ... --no-async
 
 ## Version History
 
+- **v3.10** (2024-12-16): Periodic checkpointing for high-volume items
+  - **Issues**: Checkpoint every 500 issues (10 bulk batches) instead of per-project
+  - **Comments**: Checkpoint every 500 comments during async creation (48.4M at 18M scale)
+  - **Watchers**: Checkpoint every 500 watchers during async creation (40.3M at 18M scale)
+  - **Attachments**: Checkpoint every 500 attachments during async creation (27.4M at 18M scale)
+  - **Versions**: Checkpoint every 500 versions across parallel project creation (25.9M at 18M scale)
+  - Maximum data loss on interruption reduced from potentially millions to ~500 items per type
+  - All high-volume generators now accept optional `checkpoint` parameter
+  - Added `start_count` parameter to async methods for proper resume support
+  - Critical for reliable 18M+ issue runs where crashes could lose hours of work
+
 - **v3.9** (2024-12-10): Issues-only mode
   - Added `--issues-only` option to create only projects and issues, skipping all associated data
   - Useful for quick testing of issue creation performance or scenarios where only issues are needed
@@ -1051,5 +1063,5 @@ python jira_data_generator.py ... --no-async
 
 ---
 
-**Last Updated**: 2024-12-10 (v3.8 - Adaptive Rate Limiting and Request Smoothing)
+**Last Updated**: 2024-12-16 (v3.10 - Batch-level Checkpointing for Issues)
 **AI Agent Note**: This file is specifically for you. The user-facing docs are in README.md.

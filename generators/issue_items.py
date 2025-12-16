@@ -13,6 +13,11 @@ from typing import Dict, List, Optional
 
 from .base import JiraAPIClient
 
+# Import checkpoint type for type hints (avoid circular import)
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .checkpoint import CheckpointManager
+
 
 class IssueItemsGenerator(JiraAPIClient):
     """Generates issue-related items for Jira."""
@@ -26,10 +31,12 @@ class IssueItemsGenerator(JiraAPIClient):
         dry_run: bool = False,
         concurrency: int = 5,
         benchmark=None,
-        request_delay: float = 0.0
+        request_delay: float = 0.0,
+        checkpoint: "CheckpointManager" = None
     ):
         super().__init__(jira_url, email, api_token, dry_run, concurrency, benchmark, request_delay)
         self.prefix = prefix
+        self.checkpoint = checkpoint
         self.run_id = f"{prefix}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
     def set_run_id(self, run_id: str):
@@ -73,15 +80,23 @@ class IssueItemsGenerator(JiraAPIClient):
 
         return created
 
-    async def create_comments_async(self, issue_keys: List[str], count: int) -> int:
+    async def create_comments_async(self, issue_keys: List[str], count: int, start_count: int = 0) -> int:
         """Create comments on issues concurrently.
 
         Uses memory-efficient batching to avoid creating all tasks upfront.
+        Checkpoints every 500 items to minimize data loss on interruption.
+
+        Args:
+            issue_keys: List of issue keys to add comments to
+            count: Number of comments to create
+            start_count: Starting count for checkpoint tracking (for resume)
         """
         self.logger.info(f"Creating {count} comments (concurrency: {self.concurrency})...")
 
         created = 0
+        total_created = start_count  # Track total for checkpoint
         batch_size = self.concurrency * 2
+        last_checkpoint = start_count
 
         # Memory-efficient: process in batches instead of creating all tasks upfront
         for batch_start in range(0, count, batch_size):
@@ -116,6 +131,12 @@ class IssueItemsGenerator(JiraAPIClient):
             for result in results:
                 if isinstance(result, tuple) and result[0]:
                     created += 1
+                    total_created += 1
+
+            # Checkpoint every 500 items
+            if self.checkpoint and total_created - last_checkpoint >= 500:
+                self.checkpoint.update_phase_count("comments", total_created)
+                last_checkpoint = total_created
 
             self.logger.info(f"Created {created}/{count} comments")
 
@@ -338,10 +359,17 @@ class IssueItemsGenerator(JiraAPIClient):
         self.logger.info(f"Watchers complete: {created} added, {failed} failed")
         return created
 
-    async def add_watchers_async(self, issue_keys: List[str], count: int, user_ids: List[str]) -> int:
+    async def add_watchers_async(self, issue_keys: List[str], count: int, user_ids: List[str], start_count: int = 0) -> int:
         """Add watchers to issues concurrently.
 
         Uses memory-efficient batching to avoid creating all tasks upfront.
+        Checkpoints every 500 items to minimize data loss on interruption.
+
+        Args:
+            issue_keys: List of issue keys to add watchers to
+            count: Number of watchers to add
+            user_ids: List of user account IDs to use as watchers
+            start_count: Starting count for checkpoint tracking (for resume)
         """
         self.logger.info(f"Adding {count} watchers (concurrency: {self.concurrency})...")
 
@@ -351,7 +379,9 @@ class IssueItemsGenerator(JiraAPIClient):
 
         created = 0
         failed = 0
+        total_created = start_count  # Track total for checkpoint
         batch_size = self.concurrency * 2
+        last_checkpoint = start_count
 
         # Memory-efficient: process in batches instead of creating all tasks upfront
         for batch_start in range(0, count, batch_size):
@@ -370,8 +400,14 @@ class IssueItemsGenerator(JiraAPIClient):
             for result in results:
                 if isinstance(result, tuple) and result[0]:
                     created += 1
+                    total_created += 1
                 else:
                     failed += 1
+
+            # Checkpoint every 500 items
+            if self.checkpoint and total_created - last_checkpoint >= 500:
+                self.checkpoint.update_phase_count("watchers", total_created)
+                last_checkpoint = total_created
 
             self.logger.info(f"Added {created}/{count} watchers ({failed} failed)")
 

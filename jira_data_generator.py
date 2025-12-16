@@ -128,9 +128,9 @@ class JiraDataGenerator:
             'request_delay': self.request_delay
         }
 
-        self.project_gen = ProjectGenerator(prefix=self.prefix, **common_args)
-        self.issue_gen = IssueGenerator(prefix=self.prefix, **common_args)
-        self.issue_items_gen = IssueItemsGenerator(prefix=self.prefix, **common_args)
+        self.project_gen = ProjectGenerator(prefix=self.prefix, checkpoint=self.checkpoint, **common_args)
+        self.issue_gen = IssueGenerator(prefix=self.prefix, checkpoint=self.checkpoint, **common_args)
+        self.issue_items_gen = IssueItemsGenerator(prefix=self.prefix, checkpoint=self.checkpoint, **common_args)
         self.agile_gen = AgileGenerator(prefix=self.prefix, **common_args)
         self.filter_gen = FilterGenerator(prefix=self.prefix, **common_args)
         self.custom_field_gen = CustomFieldGenerator(prefix=self.prefix, **common_args)
@@ -510,10 +510,7 @@ class JiraDataGenerator:
 
             if issue_keys:
                 all_issue_keys.extend(issue_keys)
-
-                # Update checkpoint with new issues
-                if self.checkpoint:
-                    self.checkpoint.add_issue_keys(issue_keys, project_key)
+                # Note: Checkpointing is now handled per-batch (50 issues) inside IssueGenerator
 
                 # Create components and versions for this project (only on first run per project)
                 if not self._is_phase_complete("components"):
@@ -615,6 +612,7 @@ class JiraDataGenerator:
             results = await asyncio.gather(*[t[1] for t in tasks], return_exceptions=True)
 
             # Process results
+            # Note: Checkpointing is now handled per-batch (50 issues) inside IssueGenerator
             for (project_key, _), result in zip(tasks, results):
                 if isinstance(result, Exception):
                     self.logger.error(f"Failed to create issues in {project_key}: {result}")
@@ -623,10 +621,6 @@ class JiraDataGenerator:
                 issue_keys = result
                 if issue_keys:
                     all_issue_keys.extend(issue_keys)
-
-                    # Update checkpoint with new issues
-                    if self.checkpoint:
-                        self.checkpoint.add_issue_keys(issue_keys, project_key)
 
             self.logger.info(f"Batch complete: {len(all_issue_keys)} total issues created so far")
 
@@ -838,11 +832,12 @@ class JiraDataGenerator:
                 self._start_phase("comments")
                 self.benchmark.start_phase("comments", counts['comment'])
                 remaining = self._get_remaining_count("comments", counts['comment'])
+                start_count = counts['comment'] - remaining  # How many already created
                 created = 0
                 if remaining > 0:
-                    created = await self.issue_items_gen.create_comments_async(issue_keys, remaining)
+                    created = await self.issue_items_gen.create_comments_async(issue_keys, remaining, start_count)
                     if self.checkpoint:
-                        self.checkpoint.update_phase_count("comments", counts['comment'] - remaining + created)
+                        self.checkpoint.update_phase_count("comments", start_count + created)
                 self.benchmark.end_phase("comments", created)
                 self._complete_phase("comments")
 
@@ -882,10 +877,11 @@ class JiraDataGenerator:
                     for project_key in project_keys:
                         self.project_gen.add_users_to_project(project_key, user_ids)
                     remaining = self._get_remaining_count("watchers", counts['issue_watcher'])
+                    start_count = counts['issue_watcher'] - remaining  # How many already created
                     if remaining > 0:
-                        created = await self.issue_items_gen.add_watchers_async(issue_keys, remaining, user_ids)
+                        created = await self.issue_items_gen.add_watchers_async(issue_keys, remaining, user_ids, start_count)
                         if self.checkpoint:
-                            self.checkpoint.update_phase_count("watchers", counts['issue_watcher'] - remaining + created)
+                            self.checkpoint.update_phase_count("watchers", start_count + created)
                 self.benchmark.end_phase("watchers", created)
                 self._complete_phase("watchers")
 
@@ -894,11 +890,12 @@ class JiraDataGenerator:
                 self._start_phase("attachments")
                 self.benchmark.start_phase("attachments", counts['issue_attachment'])
                 remaining = self._get_remaining_count("attachments", counts['issue_attachment'])
+                start_count = counts['issue_attachment'] - remaining  # How many already created
                 created = 0
                 if remaining > 0:
-                    created = await self.issue_gen.create_attachments_async(issue_keys, remaining)
+                    created = await self.issue_gen.create_attachments_async(issue_keys, remaining, start_count)
                     if self.checkpoint:
-                        self.checkpoint.update_phase_count("attachments", counts['issue_attachment'] - remaining + created)
+                        self.checkpoint.update_phase_count("attachments", start_count + created)
                 self.benchmark.end_phase("attachments", created)
                 self._complete_phase("attachments")
 
