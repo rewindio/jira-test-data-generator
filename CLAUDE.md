@@ -698,6 +698,7 @@ labels = PREFIX-20241204-143022
 | `--token` | No* | API token | From env |
 | `--prefix` | Yes | Prefix for items and project keys | - |
 | `--count` | Yes | Number of issues to create | - |
+| `--projects` | No | Override number of projects (issues spread evenly) | Calculated |
 | `--size` | No | Instance size bucket | `small` |
 | `--concurrency` | No | Number of concurrent API requests | `5` |
 | `--request-delay` | No | Delay between requests in seconds (try 0.05-0.1) | `0` |
@@ -939,6 +940,12 @@ python jira_data_generator.py ... --no-async
 
 ## Version History
 
+- **v3.11** (2024-12-18): Project count override
+  - Added `--projects` option to override the calculated number of projects
+  - Issues are spread evenly across the specified number of projects
+  - Useful for controlling data distribution regardless of multiplier calculations
+  - Example: `--count 18000000 --projects 100` creates 180,000 issues per project
+
 - **v3.10** (2024-12-16): Periodic checkpointing for high-volume items
   - **Issues**: Checkpoint every 500 issues (10 bulk batches) instead of per-project
   - **Comments**: Checkpoint every 500 comments during async creation (48.4M at 18M scale)
@@ -1063,5 +1070,5 @@ python jira_data_generator.py ... --no-async
 
 ---
 
-**Last Updated**: 2024-12-16 (v3.10 - Batch-level Checkpointing for Issues)
+**Last Updated**: 2024-12-18 (v3.11 - Project Count Override)
 **AI Agent Note**: This file is specifically for you. The user-facing docs are in README.md.

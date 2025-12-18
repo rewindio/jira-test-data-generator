@@ -88,7 +88,8 @@ class JiraDataGenerator:
         concurrency: int = 5,
         checkpoint_manager: Optional[CheckpointManager] = None,
         request_delay: float = 0.0,
-        issues_only: bool = False
+        issues_only: bool = False,
+        project_override: Optional[int] = None
     ):
         self.jira_url = jira_url.rstrip('/')
         self.email = email
@@ -100,6 +101,7 @@ class JiraDataGenerator:
         self.checkpoint = checkpoint_manager
         self.request_delay = request_delay
         self.issues_only = issues_only
+        self.project_override = project_override
 
         self.logger = logging.getLogger(__name__)
 
@@ -147,6 +149,8 @@ class JiraDataGenerator:
 
         If issues_only is True, only project and issue counts are calculated;
         all associated data (comments, worklogs, etc.) is set to 0.
+
+        If project_override is set, uses that instead of the calculated project count.
         """
         multipliers = MULTIPLIERS[self.size_bucket]
         counts = {}
@@ -161,6 +165,10 @@ class JiraDataGenerator:
             else:
                 raw_count = num_issues * multiplier
                 counts[item_type] = max(1, math.ceil(raw_count))
+
+        # Apply project override if specified
+        if self.project_override is not None:
+            counts['project'] = max(1, self.project_override)
 
         return counts
 
@@ -1213,6 +1221,8 @@ Checkpointing:
     parser.add_argument('--token', help='Jira API token (or set JIRA_API_TOKEN in .env file or env var)')
     parser.add_argument('--prefix', required=True, help='Prefix for all created items and project keys (e.g., PERF)')
     parser.add_argument('--count', type=int, required=True, help='Number of issues to create')
+    parser.add_argument('--projects', type=int, default=None,
+                        help='Override number of projects (default: calculated from multipliers). Issues spread evenly across projects.')
     parser.add_argument(
         '--size',
         choices=['small', 'medium', 'large', 'xlarge'],
@@ -1323,7 +1333,8 @@ Checkpointing:
             concurrency=args.concurrency,
             checkpoint_manager=checkpoint_manager,
             request_delay=args.request_delay,
-            issues_only=args.issues_only
+            issues_only=args.issues_only,
+            project_override=args.projects
         )
 
         if args.no_async:
