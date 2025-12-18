@@ -182,6 +182,7 @@ python jira_data_generator.py \
 | `--token` | No* | API token | From env |
 | `--prefix` | Yes | Prefix for items and project keys | - |
 | `--count` | Yes | Number of issues to create | - |
+| `--projects` | No | Override number of projects (issues spread evenly) | Calculated |
 | `--size` | No | Instance size bucket | `small` |
 | `--concurrency` | No | Number of concurrent API requests | `5` |
 | `--request-delay` | No | Delay between requests in seconds (0.05-0.1 recommended) | `0` |
