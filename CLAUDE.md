@@ -22,7 +22,7 @@
 - **Checkpointing for resumable large-scale runs** (18M+ issues)
 - **Benchmarking with time extrapolation and request statistics** for planning large runs
 
-**Target User**: DevOps/Engineering teams at Rewind (rewind.com) who need to test Jira backup/restore scenarios with realistic data.
+**Target User**: Teams who need to test Jira backup/restore scenarios with realistic data volumes.
 
 ---
 

@@ -744,7 +744,7 @@ A helper script to create sandbox test users and groups in your Jira instance.
 python jira_user_generator.py \
   --url https://mycompany.atlassian.net \
   --email admin@company.com \
-  --base-email dave.north@rewind.io \
+  --base-email user@example.com \
   --users 5
 ```
 
@@ -755,7 +755,7 @@ python jira_user_generator.py \
 python jira_user_generator.py \
   --url https://mycompany.atlassian.net \
   --email admin@company.com \
-  --base-email dave.north@rewind.io \
+  --base-email user@example.com \
   --users 10 \
   --groups "Test Team 1" "Test Team 2"
 ```
@@ -784,9 +784,9 @@ python jira_user_generator.py \
 ### Generated Email Format
 
 ```
-dave.north+sandbox1@rewind.io
-dave.north+sandbox2@rewind.io
-dave.north+sandbox3@rewind.io
+user+sandbox1@example.com
+user+sandbox2@example.com
+user+sandbox3@example.com
 ...
 ```
 
@@ -795,7 +795,7 @@ dave.north+sandbox3@rewind.io
 ```
 ============================================================
 Starting Jira user/group generation
-Base email: dave.north@rewind.io
+Base email: user@example.com
 User count: 5
 Products: jira-software
 Groups: Test Team 1, Test Team 2
@@ -806,8 +806,8 @@ Groups created: 2
   - Test Team 2
 
 Users invited: 5
-  - dave.north+sandbox1@rewind.io (accountId: abc123)
-  - dave.north+sandbox2@rewind.io (accountId: def456)
+  - user+sandbox1@example.com (accountId: abc123)
+  - user+sandbox2@example.com (accountId: def456)
   ...
 
 Summary:
@@ -877,5 +877,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Support
 
-Questions? Contact the Cloud Ops team or check the Confluence page:
-https://rewind.atlassian.net/wiki/spaces/DEV/pages/4143612121
+Questions or issues? Please [open a GitHub issue](https://github.com/rewindio/jira-test-data-generator/issues).

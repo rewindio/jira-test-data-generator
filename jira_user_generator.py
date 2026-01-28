@@ -395,26 +395,26 @@ Examples:
   # Generate 5 sandbox users
   %(prog)s --url https://mycompany.atlassian.net \\
            --email admin@mycompany.com \\
-           --base-email dave.north@rewind.io \\
+           --base-email user@example.com \\
            --users 5
 
   # Generate users and groups
   %(prog)s --url https://mycompany.atlassian.net \\
            --email admin@mycompany.com \\
-           --base-email dave.north@rewind.io \\
+           --base-email user@example.com \\
            --users 10 \\
            --groups "Test Group 1" "Test Group 2"
 
   # Dry run to see what would be created
   %(prog)s --url https://mycompany.atlassian.net \\
            --email admin@mycompany.com \\
-           --base-email dave.north@rewind.io \\
+           --base-email user@example.com \\
            --users 5 \\
            --dry-run
 
 Generated emails will be in format:
-  dave.north+sandbox1@rewind.io
-  dave.north+sandbox2@rewind.io
+  user+sandbox1@example.com
+  user+sandbox2@example.com
   ...
         """
     )
@@ -422,7 +422,7 @@ Generated emails will be in format:
     parser.add_argument('--url', required=True, help='Jira URL (e.g., https://mycompany.atlassian.net)')
     parser.add_argument('--email', required=True, help='Your Jira admin email')
     parser.add_argument('--token', help='Jira API token (or set JIRA_API_TOKEN env var)')
-    parser.add_argument('--base-email', required=True, help='Base email for sandbox users (e.g., dave.north@rewind.io)')
+    parser.add_argument('--base-email', required=True, help='Base email for sandbox users (e.g., user@example.com)')
     parser.add_argument('--users', type=int, required=True, help='Number of sandbox users to create')
     parser.add_argument('--groups', nargs='+', help='Group names to create')
     parser.add_argument('--user-prefix', default='Sandbox', help='Display name prefix for users (default: Sandbox)')
