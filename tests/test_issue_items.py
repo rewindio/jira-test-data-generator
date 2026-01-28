@@ -2,14 +2,14 @@
 Unit tests for generators/issue_items.py - IssueItemsGenerator.
 """
 
+from unittest.mock import patch
+
 import pytest
 import responses
 from aioresponses import aioresponses
-from unittest.mock import patch
 
-from generators.issue_items import IssueItemsGenerator
 from generators.checkpoint import CheckpointManager
-
+from generators.issue_items import IssueItemsGenerator
 
 JIRA_URL = "https://test.atlassian.net"
 TEST_EMAIL = "test@example.com"
@@ -461,7 +461,7 @@ class TestIssueItemsGeneratorWithCheckpoint:
                     payload={"id": "10001"}
                 )
 
-            count = await issue_items_gen_with_checkpoint.create_comments_async(
+            await issue_items_gen_with_checkpoint.create_comments_async(
                 issue_keys, 100, start_count=0
             )
 

@@ -3,9 +3,6 @@ Unit tests for generators/benchmark.py - BenchmarkTracker and PhaseMetrics.
 """
 
 import time
-from unittest.mock import patch
-
-import pytest
 
 from generators.benchmark import BenchmarkTracker, PhaseMetrics
 

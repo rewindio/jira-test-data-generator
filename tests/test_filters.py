@@ -2,13 +2,13 @@
 Unit tests for generators/filters.py - FilterGenerator.
 """
 
+from unittest.mock import patch
+
 import pytest
 import responses
 from aioresponses import aioresponses
-from unittest.mock import patch
 
 from generators.filters import FilterGenerator
-
 
 JIRA_URL = "https://test.atlassian.net"
 TEST_EMAIL = "test@example.com"

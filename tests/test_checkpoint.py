@@ -3,12 +3,8 @@ Unit tests for generators/checkpoint.py - CheckpointManager, CheckpointData, Pha
 """
 
 import json
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 
-import pytest
-
-from generators.checkpoint import CheckpointManager, CheckpointData, PhaseProgress
+from generators.checkpoint import CheckpointData, CheckpointManager, PhaseProgress
 
 
 class TestPhaseProgress:

@@ -2,14 +2,14 @@
 Unit tests for generators/projects.py - ProjectGenerator.
 """
 
+from unittest.mock import patch
+
 import pytest
 import responses
 from aioresponses import aioresponses
-from unittest.mock import patch, MagicMock
 
-from generators.projects import ProjectGenerator
 from generators.checkpoint import CheckpointManager
-
+from generators.projects import ProjectGenerator
 
 JIRA_URL = "https://test.atlassian.net"
 TEST_EMAIL = "test@example.com"

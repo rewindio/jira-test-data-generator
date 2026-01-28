@@ -2,25 +2,14 @@
 Unit tests for jira_data_generator.py - JiraDataGenerator main orchestrator.
 """
 
-import os
-import sys
-import csv
-import tempfile
-from io import StringIO
-from unittest.mock import patch, MagicMock
 
 import pytest
 import responses
-from aioresponses import aioresponses
 
-# Import the module
-from jira_data_generator import (
-    JiraDataGenerator,
-    load_multipliers_from_csv,
-    MULTIPLIERS
-)
 from generators.checkpoint import CheckpointManager
 
+# Import the module
+from jira_data_generator import MULTIPLIERS, JiraDataGenerator, load_multipliers_from_csv
 
 JIRA_URL = "https://test.atlassian.net"
 TEST_EMAIL = "test@example.com"
@@ -214,7 +203,7 @@ class TestJiraDataGeneratorCalculateCounts:
 
         counts = generator.calculate_counts(10)
 
-        for item_type, count in counts.items():
+        for _item_type, count in counts.items():
             assert count >= 1 or count == 0  # Some may be 0 for small counts
 
     def test_calculate_counts_issues_only(self):

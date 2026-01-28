@@ -2,14 +2,14 @@
 Unit tests for generators/agile.py - AgileGenerator.
 """
 
+from datetime import datetime, timedelta
+from unittest.mock import patch
+
 import pytest
 import responses
 from aioresponses import aioresponses
-from unittest.mock import patch
-from datetime import datetime, timedelta
 
 from generators.agile import AgileGenerator
-
 
 JIRA_URL = "https://test.atlassian.net"
 TEST_EMAIL = "test@example.com"
@@ -72,7 +72,7 @@ class TestAgileGeneratorBoards:
             status=200
         )
 
-        boards = agile_gen.get_boards(project_key="TEST1")
+        agile_gen.get_boards(project_key="TEST1")
 
         assert len(responses.calls) == 1
         assert "projectKeyOrId=TEST1" in responses.calls[0].request.url

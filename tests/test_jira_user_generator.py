@@ -2,12 +2,13 @@
 Unit tests for jira_user_generator.py - JiraUserGenerator.
 """
 
-import pytest
-import responses
 from unittest.mock import patch
 
-from jira_user_generator import JiraUserGenerator
+import pytest
+import requests
+import responses
 
+from jira_user_generator import JiraUserGenerator
 
 JIRA_URL = "https://test.atlassian.net"
 TEST_EMAIL = "test@example.com"
@@ -468,7 +469,7 @@ class TestJiraUserGeneratorAPICall:
         )
 
         with patch("time.sleep"):
-            with pytest.raises(Exception):
+            with pytest.raises(requests.exceptions.HTTPError):
                 user_gen._api_call("GET", "test")
 
 

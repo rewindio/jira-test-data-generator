@@ -4,7 +4,7 @@ Unit tests for generators/base.py - JiraAPIClient, RateLimitState, text pool, ra
 
 import asyncio
 import time
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 import responses
@@ -12,7 +12,6 @@ from aioresponses import aioresponses
 
 from generators.base import JiraAPIClient, RateLimitState
 from generators.benchmark import BenchmarkTracker
-
 
 JIRA_URL = "https://test.atlassian.net"
 TEST_EMAIL = "test@example.com"
@@ -89,7 +88,7 @@ class TestJiraAPIClientTextPool:
 
     def test_text_pool_initialized(self, base_client_kwargs):
         """Test text pool is initialized."""
-        client = JiraAPIClient(**base_client_kwargs)
+        JiraAPIClient(**base_client_kwargs)  # Triggers initialization
         assert JiraAPIClient._text_pool is not None
         assert "short" in JiraAPIClient._text_pool
         assert "medium" in JiraAPIClient._text_pool
@@ -97,7 +96,7 @@ class TestJiraAPIClientTextPool:
 
     def test_text_pool_sizes(self, base_client_kwargs):
         """Test text pool has correct sizes."""
-        client = JiraAPIClient(**base_client_kwargs)
+        JiraAPIClient(**base_client_kwargs)  # Triggers initialization
         assert len(JiraAPIClient._text_pool["short"]) == JiraAPIClient._TEXT_POOL_SIZE
         assert len(JiraAPIClient._text_pool["medium"]) == JiraAPIClient._TEXT_POOL_SIZE
         assert len(JiraAPIClient._text_pool["long"]) == JiraAPIClient._TEXT_POOL_SIZE

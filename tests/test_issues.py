@@ -2,16 +2,14 @@
 Unit tests for generators/issues.py - IssueGenerator.
 """
 
+from unittest.mock import patch
+
 import pytest
 import responses
 from aioresponses import aioresponses
-from unittest.mock import patch, MagicMock
-import tempfile
-import os
 
-from generators.issues import IssueGenerator
 from generators.checkpoint import CheckpointManager
-
+from generators.issues import IssueGenerator
 
 JIRA_URL = "https://test.atlassian.net"
 TEST_EMAIL = "test@example.com"

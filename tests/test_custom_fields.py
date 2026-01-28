@@ -2,17 +2,13 @@
 Unit tests for generators/custom_fields.py - CustomFieldGenerator.
 """
 
+from unittest.mock import patch
+
 import pytest
 import responses
 from aioresponses import aioresponses
-from unittest.mock import patch
 
-from generators.custom_fields import (
-    CustomFieldGenerator,
-    CUSTOM_FIELD_TYPES,
-    GENERATABLE_FIELD_TYPES
-)
-
+from generators.custom_fields import CUSTOM_FIELD_TYPES, GENERATABLE_FIELD_TYPES, CustomFieldGenerator
 
 JIRA_URL = "https://test.atlassian.net"
 TEST_EMAIL = "test@example.com"

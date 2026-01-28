@@ -2,11 +2,11 @@
 Unit tests for CLI entry points in jira_data_generator.py and jira_user_generator.py.
 """
 
-import sys
 import logging
+import sys
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-import argparse
 
 
 def create_mock_file_handler():
