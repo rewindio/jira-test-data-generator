@@ -43,8 +43,25 @@
 │   ├── custom_fields.py         # CustomFieldGenerator (~500 lines) - custom fields, contexts, options
 │   ├── checkpoint.py            # CheckpointManager (~450 lines) - resumable runs
 │   └── benchmark.py             # BenchmarkTracker (~400 lines) - timing, request stats, extrapolation
+├── tests/                        # Unit tests (90%+ coverage)
+│   ├── conftest.py              # Shared pytest fixtures
+│   ├── test_base.py             # JiraAPIClient tests
+│   ├── test_benchmark.py        # BenchmarkTracker tests
+│   ├── test_checkpoint.py       # CheckpointManager tests
+│   ├── test_projects.py         # ProjectGenerator tests
+│   ├── test_issues.py           # IssueGenerator tests
+│   ├── test_issue_items.py      # IssueItemsGenerator tests
+│   ├── test_agile.py            # AgileGenerator tests
+│   ├── test_filters.py          # FilterGenerator tests
+│   ├── test_custom_fields.py    # CustomFieldGenerator tests
+│   ├── test_jira_data_generator.py  # Main orchestrator tests
+│   ├── test_jira_user_generator.py  # User generator tests
+│   └── test_cli.py              # CLI entry point tests
+├── .github/workflows/test.yml   # GitHub Actions CI/CD
 ├── item_type_multipliers.csv    # Multiplier configuration
 ├── requirements.txt             # Python dependencies
+├── requirements-dev.txt         # Test dependencies (pytest, coverage, etc.)
+├── pytest.ini                   # Pytest configuration
 ├── .env.example                 # API token template
 ├── .gitignore                   # Python venv and credentials
 ├── README.md                    # User-facing documentation
@@ -601,6 +618,46 @@ issue_data = {
 ---
 
 ## Testing Guidelines
+
+### Unit Tests
+
+The project has comprehensive unit tests with 90%+ code coverage.
+
+```bash
+# Install test dependencies
+pip install -r requirements-dev.txt
+
+# Run all tests in parallel (fastest)
+pytest -n auto
+
+# Run with coverage report
+pytest -n auto --cov=generators --cov=jira_data_generator --cov=jira_user_generator --cov-report=term-missing
+
+# Run a specific test file
+pytest tests/test_cli.py -v
+
+# Run tests matching a pattern
+pytest -k "test_dry_run"
+
+# Run only failed tests from last run
+pytest --lf
+```
+
+**Test Dependencies** (`requirements-dev.txt`):
+- `pytest` - Test framework
+- `pytest-asyncio` - Async test support
+- `pytest-cov` - Coverage reporting
+- `pytest-xdist` - Parallel test execution
+- `responses` - Mock sync HTTP requests
+- `aioresponses` - Mock async HTTP requests
+
+**Mocking Strategy**:
+- Sync HTTP calls mocked with `responses` library
+- Async HTTP calls mocked with `aioresponses` library
+- File I/O uses `tmp_path` fixture
+- CLI tests mock `sys.argv` and `logging.FileHandler`
+
+**CI/CD**: Tests run on GitHub Actions for Python 3.9, 3.11, 3.12 with 90% coverage threshold.
 
 ### Dry Run Testing
 

@@ -847,6 +847,55 @@ jira-test-data-generator/
 └── CLAUDE.md                  # AI agent documentation
 ```
 
+## Development
+
+### Running Tests
+
+The project includes a comprehensive test suite with 90%+ code coverage.
+
+```bash
+# Install test dependencies
+pip install -r requirements-dev.txt
+
+# Run all tests (parallel for speed)
+pytest -n auto
+
+# Run tests with coverage report
+pytest -n auto --cov=generators --cov=jira_data_generator --cov=jira_user_generator
+
+# Run a specific test file
+pytest tests/test_cli.py
+
+# Run tests matching a pattern
+pytest -k "test_dry_run"
+
+# Run only failed tests from last run
+pytest --lf
+```
+
+### Test Structure
+
+```
+tests/
+├── conftest.py              # Shared fixtures
+├── test_base.py             # API client, rate limiting tests
+├── test_benchmark.py        # Benchmark tracking tests
+├── test_checkpoint.py       # Checkpoint/resume tests
+├── test_projects.py         # Project generator tests
+├── test_issues.py           # Issue generator tests
+├── test_issue_items.py      # Comments, worklogs, etc. tests
+├── test_agile.py            # Boards, sprints tests
+├── test_filters.py          # Filters, dashboards tests
+├── test_custom_fields.py    # Custom fields tests
+├── test_jira_data_generator.py  # Main orchestrator tests
+├── test_jira_user_generator.py  # User generator tests
+└── test_cli.py              # CLI entry point tests
+```
+
+### CI/CD
+
+Tests run automatically on GitHub Actions for Python 3.9, 3.11, and 3.12 on every push and pull request.
+
 ## Contributing
 
 Feel free to extend this! Some ideas:
