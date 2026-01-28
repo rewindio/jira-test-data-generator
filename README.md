@@ -1,5 +1,10 @@
 # Jira Test Data Generator
 
+[![Tests](https://github.com/rewindio/jira-test-data-generator/actions/workflows/test.yml/badge.svg)](https://github.com/rewindio/jira-test-data-generator/actions/workflows/test.yml)
+[![Lint](https://github.com/rewindio/jira-test-data-generator/actions/workflows/lint.yml/badge.svg)](https://github.com/rewindio/jira-test-data-generator/actions/workflows/lint.yml)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 A Python tool to generate realistic test data for Jira instances based on production data multipliers. Intelligently handles rate limiting and uses bulk APIs and async concurrency for optimal performance.
 
 ## Features
