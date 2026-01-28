@@ -894,7 +894,7 @@ tests/
 
 ### CI/CD
 
-Tests run automatically on GitHub Actions for Python 3.9, 3.11, and 3.12 on every push and pull request.
+Tests run automatically on GitHub Actions (Python 3.12) on every push and pull request.
 
 ## Contributing
 

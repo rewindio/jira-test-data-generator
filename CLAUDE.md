@@ -657,7 +657,7 @@ pytest --lf
 - File I/O uses `tmp_path` fixture
 - CLI tests mock `sys.argv` and `logging.FileHandler`
 
-**CI/CD**: Tests run on GitHub Actions for Python 3.9, 3.11, 3.12 with 90% coverage threshold.
+**CI/CD**: Tests run on GitHub Actions (Python 3.12) with 90% coverage threshold.
 
 ### Dry Run Testing
 
