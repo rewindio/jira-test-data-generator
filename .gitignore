@@ -36,3 +36,11 @@ Thumbs.db
 
 # Checkpoint files
 *-checkpoint.json
+
+# Test artifacts
+.coverage
+coverage.xml
+htmlcov/
+pytest.xml
+pytest-coverage.txt
+.pytest_cache/

@@ -1,0 +1,42 @@
+# Ruff configuration
+# https://docs.astral.sh/ruff/configuration/
+
+# Exclude virtual environments and other non-source directories
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "lib",
+    "__pycache__",
+]
+
+# Target Python 3.9+ (matches project requirements)
+target-version = "py39"
+
+# Line length to match common standards
+line-length = 120
+
+[lint]
+# Enable recommended rules
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+]
+
+# Ignore rules that conflict with existing code style
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # function call in default argument (used intentionally)
+]
+
+[format]
+# Use double quotes for strings
+quote-style = "double"
+
+# Indent with spaces
+indent-style = "space"

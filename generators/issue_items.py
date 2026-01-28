@@ -9,12 +9,12 @@ import asyncio
 import random
 import time
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
-
-from .base import JiraAPIClient
 
 # Import checkpoint type for type hints (avoid circular import)
 from typing import TYPE_CHECKING
+
+from .base import JiraAPIClient
+
 if TYPE_CHECKING:
     from .checkpoint import CheckpointManager
 
@@ -32,7 +32,7 @@ class IssueItemsGenerator(JiraAPIClient):
         concurrency: int = 5,
         benchmark=None,
         request_delay: float = 0.0,
-        checkpoint: "CheckpointManager" = None
+        checkpoint: "CheckpointManager" = None,
     ):
         super().__init__(jira_url, email, api_token, dry_run, concurrency, benchmark, request_delay)
         self.prefix = prefix
@@ -45,7 +45,7 @@ class IssueItemsGenerator(JiraAPIClient):
 
     # ========== COMMENTS ==========
 
-    def create_comments(self, issue_keys: List[str], count: int) -> int:
+    def create_comments(self, issue_keys: list[str], count: int) -> int:
         """Create comments on issues"""
         self.logger.info(f"Creating {count} comments...")
 
@@ -60,17 +60,14 @@ class IssueItemsGenerator(JiraAPIClient):
                         {
                             "type": "paragraph",
                             "content": [
-                                {
-                                    "type": "text",
-                                    "text": f"{self.prefix} comment: {self.generate_random_text(5, 15)}"
-                                }
-                            ]
+                                {"type": "text", "text": f"{self.prefix} comment: {self.generate_random_text(5, 15)}"}
+                            ],
                         }
-                    ]
+                    ],
                 }
             }
 
-            response = self._api_call('POST', f'issue/{issue_key}/comment', data=comment_data)
+            response = self._api_call("POST", f"issue/{issue_key}/comment", data=comment_data)
             if response:
                 created += 1
 
@@ -80,7 +77,7 @@ class IssueItemsGenerator(JiraAPIClient):
 
         return created
 
-    async def create_comments_async(self, issue_keys: List[str], count: int, start_count: int = 0) -> int:
+    async def create_comments_async(self, issue_keys: list[str], count: int, start_count: int = 0) -> int:
         """Create comments on issues concurrently.
 
         Uses memory-efficient batching to avoid creating all tasks upfront.
@@ -117,14 +114,14 @@ class IssueItemsGenerator(JiraAPIClient):
                                 "content": [
                                     {
                                         "type": "text",
-                                        "text": f"{self.prefix} comment: {self.generate_random_text(5, 15)}"
+                                        "text": f"{self.prefix} comment: {self.generate_random_text(5, 15)}",
                                     }
-                                ]
+                                ],
                             }
-                        ]
+                        ],
                     }
                 }
-                tasks.append(self._api_call_async('POST', f'issue/{issue_key}/comment', data=comment_data))
+                tasks.append(self._api_call_async("POST", f"issue/{issue_key}/comment", data=comment_data))
 
             # Execute batch
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -144,7 +141,7 @@ class IssueItemsGenerator(JiraAPIClient):
 
     # ========== WORKLOGS ==========
 
-    def create_worklogs(self, issue_keys: List[str], count: int) -> int:
+    def create_worklogs(self, issue_keys: list[str], count: int) -> int:
         """Create worklogs on issues"""
         self.logger.info(f"Creating {count} worklogs...")
 
@@ -162,18 +159,17 @@ class IssueItemsGenerator(JiraAPIClient):
                         {
                             "type": "paragraph",
                             "content": [
-                                {
-                                    "type": "text",
-                                    "text": f"{self.prefix} work: {self.generate_random_text(3, 10)}"
-                                }
-                            ]
+                                {"type": "text", "text": f"{self.prefix} work: {self.generate_random_text(3, 10)}"}
+                            ],
                         }
-                    ]
+                    ],
                 },
-                "started": (datetime.now() - timedelta(days=random.randint(0, 30))).strftime('%Y-%m-%dT%H:%M:%S.000+0000')
+                "started": (datetime.now() - timedelta(days=random.randint(0, 30))).strftime(
+                    "%Y-%m-%dT%H:%M:%S.000+0000"
+                ),
             }
 
-            response = self._api_call('POST', f'issue/{issue_key}/worklog', data=worklog_data)
+            response = self._api_call("POST", f"issue/{issue_key}/worklog", data=worklog_data)
             if response:
                 created += 1
 
@@ -183,7 +179,7 @@ class IssueItemsGenerator(JiraAPIClient):
 
         return created
 
-    async def create_worklogs_async(self, issue_keys: List[str], count: int) -> int:
+    async def create_worklogs_async(self, issue_keys: list[str], count: int) -> int:
         """Create worklogs on issues concurrently.
 
         Uses memory-efficient batching to avoid creating all tasks upfront.
@@ -213,17 +209,16 @@ class IssueItemsGenerator(JiraAPIClient):
                             {
                                 "type": "paragraph",
                                 "content": [
-                                    {
-                                        "type": "text",
-                                        "text": f"{self.prefix} work: {self.generate_random_text(3, 10)}"
-                                    }
-                                ]
+                                    {"type": "text", "text": f"{self.prefix} work: {self.generate_random_text(3, 10)}"}
+                                ],
                             }
-                        ]
+                        ],
                     },
-                    "started": (datetime.now() - timedelta(days=random.randint(0, 30))).strftime('%Y-%m-%dT%H:%M:%S.000+0000')
+                    "started": (datetime.now() - timedelta(days=random.randint(0, 30))).strftime(
+                        "%Y-%m-%dT%H:%M:%S.000+0000"
+                    ),
                 }
-                tasks.append(self._api_call_async('POST', f'issue/{issue_key}/worklog', data=worklog_data))
+                tasks.append(self._api_call_async("POST", f"issue/{issue_key}/worklog", data=worklog_data))
 
             # Execute batch
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -237,17 +232,17 @@ class IssueItemsGenerator(JiraAPIClient):
 
     # ========== ISSUE LINKS ==========
 
-    def get_link_types(self) -> List[Dict]:
+    def get_link_types(self) -> list[dict]:
         """Get available issue link types"""
         if self.dry_run:
-            return [{'name': 'Blocks'}, {'name': 'Relates'}]
+            return [{"name": "Blocks"}, {"name": "Relates"}]
 
-        response = self._api_call('GET', 'issueLinkType')
+        response = self._api_call("GET", "issueLinkType")
         if response:
-            return response.json().get('issueLinkTypes', [])
+            return response.json().get("issueLinkTypes", [])
         return []
 
-    def create_issue_links(self, issue_keys: List[str], count: int) -> int:
+    def create_issue_links(self, issue_keys: list[str], count: int) -> int:
         """Create issue links"""
         self.logger.info(f"Creating {count} issue links...")
 
@@ -267,12 +262,12 @@ class IssueItemsGenerator(JiraAPIClient):
             link_type = random.choice(link_types)
 
             link_data = {
-                "type": {"name": link_type['name']},
+                "type": {"name": link_type["name"]},
                 "inwardIssue": {"key": inward_issue},
-                "outwardIssue": {"key": outward_issue}
+                "outwardIssue": {"key": outward_issue},
             }
 
-            response = self._api_call('POST', 'issueLink', data=link_data)
+            response = self._api_call("POST", "issueLink", data=link_data)
             if response is not None or self.dry_run:
                 created += 1
 
@@ -282,7 +277,7 @@ class IssueItemsGenerator(JiraAPIClient):
 
         return created
 
-    async def create_issue_links_async(self, issue_keys: List[str], count: int) -> int:
+    async def create_issue_links_async(self, issue_keys: list[str], count: int) -> int:
         """Create issue links concurrently.
 
         Uses memory-efficient batching to avoid creating all tasks upfront.
@@ -314,11 +309,11 @@ class IssueItemsGenerator(JiraAPIClient):
                 link_type = random.choice(link_types)
 
                 link_data = {
-                    "type": {"name": link_type['name']},
+                    "type": {"name": link_type["name"]},
                     "inwardIssue": {"key": inward_issue},
-                    "outwardIssue": {"key": outward_issue}
+                    "outwardIssue": {"key": outward_issue},
                 }
-                tasks.append(self._api_call_async('POST', 'issueLink', data=link_data))
+                tasks.append(self._api_call_async("POST", "issueLink", data=link_data))
 
             # Execute batch
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -332,7 +327,7 @@ class IssueItemsGenerator(JiraAPIClient):
 
     # ========== WATCHERS ==========
 
-    def add_watchers(self, issue_keys: List[str], count: int, user_ids: List[str]) -> int:
+    def add_watchers(self, issue_keys: list[str], count: int, user_ids: list[str]) -> int:
         """Add watchers to issues"""
         self.logger.info(f"Adding {count} watchers...")
 
@@ -346,7 +341,7 @@ class IssueItemsGenerator(JiraAPIClient):
             issue_key = random.choice(issue_keys)
             watcher_id = random.choice(user_ids)
 
-            response = self._api_call('POST', f'issue/{issue_key}/watchers', data=watcher_id)
+            response = self._api_call("POST", f"issue/{issue_key}/watchers", data=watcher_id)
             if response is not None or self.dry_run:
                 created += 1
             else:
@@ -359,7 +354,9 @@ class IssueItemsGenerator(JiraAPIClient):
         self.logger.info(f"Watchers complete: {created} added, {failed} failed")
         return created
 
-    async def add_watchers_async(self, issue_keys: List[str], count: int, user_ids: List[str], start_count: int = 0) -> int:
+    async def add_watchers_async(
+        self, issue_keys: list[str], count: int, user_ids: list[str], start_count: int = 0
+    ) -> int:
         """Add watchers to issues concurrently.
 
         Uses memory-efficient batching to avoid creating all tasks upfront.
@@ -393,7 +390,7 @@ class IssueItemsGenerator(JiraAPIClient):
             for _ in range(current_batch_size):
                 issue_key = random.choice(issue_keys)
                 watcher_id = random.choice(user_ids)
-                tasks.append(self._api_call_async('POST', f'issue/{issue_key}/watchers', data=watcher_id))
+                tasks.append(self._api_call_async("POST", f"issue/{issue_key}/watchers", data=watcher_id))
 
             # Execute batch
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -416,7 +413,7 @@ class IssueItemsGenerator(JiraAPIClient):
 
     # ========== VOTES ==========
 
-    def add_votes(self, issue_keys: List[str], count: int) -> int:
+    def add_votes(self, issue_keys: list[str], count: int) -> int:
         """Add votes to issues.
 
         Note: Each user can only vote once per issue. This adds votes from the
@@ -431,7 +428,7 @@ class IssueItemsGenerator(JiraAPIClient):
         created = 0
         failed = 0
         for issue_key in issues_to_vote:
-            response = self._api_call('POST', f'issue/{issue_key}/votes')
+            response = self._api_call("POST", f"issue/{issue_key}/votes")
             if response is not None or self.dry_run:
                 created += 1
             else:
@@ -444,7 +441,7 @@ class IssueItemsGenerator(JiraAPIClient):
         self.logger.info(f"Votes complete: {created} added, {failed} failed")
         return created
 
-    async def add_votes_async(self, issue_keys: List[str], count: int) -> int:
+    async def add_votes_async(self, issue_keys: list[str], count: int) -> int:
         """Add votes to issues concurrently.
 
         Uses memory-efficient batching to avoid creating all tasks upfront.
@@ -466,7 +463,7 @@ class IssueItemsGenerator(JiraAPIClient):
             # Generate tasks for this batch only
             tasks = []
             for issue_key in batch_issues:
-                tasks.append(self._api_call_async('POST', f'issue/{issue_key}/votes'))
+                tasks.append(self._api_call_async("POST", f"issue/{issue_key}/votes"))
 
             # Execute batch
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -483,7 +480,7 @@ class IssueItemsGenerator(JiraAPIClient):
 
     # ========== ISSUE PROPERTIES ==========
 
-    def create_issue_properties(self, issue_keys: List[str], count: int) -> int:
+    def create_issue_properties(self, issue_keys: list[str], count: int) -> int:
         """Create custom properties on issues.
 
         Issue properties are key-value pairs that can store arbitrary JSON data.
@@ -503,14 +500,11 @@ class IssueItemsGenerator(JiraAPIClient):
                 "timestamp": datetime.now().isoformat(),
                 "randomValue": random.randint(1, 10000),
                 "category": random.choice(["alpha", "beta", "gamma", "delta"]),
-                "metadata": {
-                    "index": i + 1,
-                    "description": self.generate_random_text(5, 15)
-                }
+                "metadata": {"index": i + 1, "description": self.generate_random_text(5, 15)},
             }
 
             # Note: Properties use PUT, not POST
-            response = self._api_call('PUT', f'issue/{issue_key}/properties/{property_key}', data=property_data)
+            response = self._api_call("PUT", f"issue/{issue_key}/properties/{property_key}", data=property_data)
             if response is not None or self.dry_run:
                 created += 1
             else:
@@ -523,7 +517,7 @@ class IssueItemsGenerator(JiraAPIClient):
         self.logger.info(f"Properties complete: {created} created, {failed} failed")
         return created
 
-    async def create_issue_properties_async(self, issue_keys: List[str], count: int) -> int:
+    async def create_issue_properties_async(self, issue_keys: list[str], count: int) -> int:
         """Create custom properties on issues concurrently.
 
         Uses memory-efficient batching to avoid creating all tasks upfront.
@@ -553,12 +547,11 @@ class IssueItemsGenerator(JiraAPIClient):
                     "timestamp": datetime.now().isoformat(),
                     "randomValue": random.randint(1, 10000),
                     "category": random.choice(["alpha", "beta", "gamma", "delta"]),
-                    "metadata": {
-                        "index": property_index,
-                        "description": self.generate_random_text(5, 15)
-                    }
+                    "metadata": {"index": property_index, "description": self.generate_random_text(5, 15)},
                 }
-                tasks.append(self._api_call_async('PUT', f'issue/{issue_key}/properties/{property_key}', data=property_data))
+                tasks.append(
+                    self._api_call_async("PUT", f"issue/{issue_key}/properties/{property_key}", data=property_data)
+                )
 
             # Execute batch
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -575,7 +568,7 @@ class IssueItemsGenerator(JiraAPIClient):
 
     # ========== REMOTE LINKS ==========
 
-    def create_remote_links(self, issue_keys: List[str], count: int) -> int:
+    def create_remote_links(self, issue_keys: list[str], count: int) -> int:
         """Create remote links on issues.
 
         Remote links connect Jira issues to external URLs/resources.
@@ -601,23 +594,17 @@ class IssueItemsGenerator(JiraAPIClient):
 
             remote_link_data = {
                 "globalId": f"{self.run_id}-remote-link-{i + 1}",
-                "application": {
-                    "type": "com.test.data.generator",
-                    "name": "Test Data Generator"
-                },
+                "application": {"type": "com.test.data.generator", "name": "Test Data Generator"},
                 "relationship": random.choice(["relates to", "is documented by", "is tested by"]),
                 "object": {
                     "url": url,
                     "title": f"{self.prefix} Remote Link {i + 1}",
                     "summary": self.generate_random_text(5, 15),
-                    "icon": {
-                        "url16x16": "https://example.com/icon.png",
-                        "title": "External Resource"
-                    }
-                }
+                    "icon": {"url16x16": "https://example.com/icon.png", "title": "External Resource"},
+                },
             }
 
-            response = self._api_call('POST', f'issue/{issue_key}/remotelink', data=remote_link_data)
+            response = self._api_call("POST", f"issue/{issue_key}/remotelink", data=remote_link_data)
             if response is not None or self.dry_run:
                 created += 1
             else:
@@ -630,7 +617,7 @@ class IssueItemsGenerator(JiraAPIClient):
         self.logger.info(f"Remote links complete: {created} created, {failed} failed")
         return created
 
-    async def create_remote_links_async(self, issue_keys: List[str], count: int) -> int:
+    async def create_remote_links_async(self, issue_keys: list[str], count: int) -> int:
         """Create remote links on issues concurrently.
 
         Uses memory-efficient batching to avoid creating all tasks upfront.
@@ -666,22 +653,16 @@ class IssueItemsGenerator(JiraAPIClient):
 
                 remote_link_data = {
                     "globalId": f"{self.run_id}-remote-link-{link_index}",
-                    "application": {
-                        "type": "com.test.data.generator",
-                        "name": "Test Data Generator"
-                    },
+                    "application": {"type": "com.test.data.generator", "name": "Test Data Generator"},
                     "relationship": random.choice(["relates to", "is documented by", "is tested by"]),
                     "object": {
                         "url": url,
                         "title": f"{self.prefix} Remote Link {link_index}",
                         "summary": self.generate_random_text(5, 15),
-                        "icon": {
-                            "url16x16": "https://example.com/icon.png",
-                            "title": "External Resource"
-                        }
-                    }
+                        "icon": {"url16x16": "https://example.com/icon.png", "title": "External Resource"},
+                    },
                 }
-                tasks.append(self._api_call_async('POST', f'issue/{issue_key}/remotelink', data=remote_link_data))
+                tasks.append(self._api_call_async("POST", f"issue/{issue_key}/remotelink", data=remote_link_data))
 
             # Execute batch
             results = await asyncio.gather(*tasks, return_exceptions=True)

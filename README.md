@@ -1,5 +1,10 @@
 # Jira Test Data Generator
 
+[![Tests](https://github.com/rewindio/jira-test-data-generator/actions/workflows/test.yml/badge.svg)](https://github.com/rewindio/jira-test-data-generator/actions/workflows/test.yml)
+[![Lint](https://github.com/rewindio/jira-test-data-generator/actions/workflows/lint.yml/badge.svg)](https://github.com/rewindio/jira-test-data-generator/actions/workflows/lint.yml)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 A Python tool to generate realistic test data for Jira instances based on production data multipliers. Intelligently handles rate limiting and uses bulk APIs and async concurrency for optimal performance.
 
 ## Features
@@ -744,7 +749,7 @@ A helper script to create sandbox test users and groups in your Jira instance.
 python jira_user_generator.py \
   --url https://mycompany.atlassian.net \
   --email admin@company.com \
-  --base-email dave.north@rewind.io \
+  --base-email user@example.com \
   --users 5
 ```
 
@@ -755,7 +760,7 @@ python jira_user_generator.py \
 python jira_user_generator.py \
   --url https://mycompany.atlassian.net \
   --email admin@company.com \
-  --base-email dave.north@rewind.io \
+  --base-email user@example.com \
   --users 10 \
   --groups "Test Team 1" "Test Team 2"
 ```
@@ -784,9 +789,9 @@ python jira_user_generator.py \
 ### Generated Email Format
 
 ```
-dave.north+sandbox1@rewind.io
-dave.north+sandbox2@rewind.io
-dave.north+sandbox3@rewind.io
+user+sandbox1@example.com
+user+sandbox2@example.com
+user+sandbox3@example.com
 ...
 ```
 
@@ -795,7 +800,7 @@ dave.north+sandbox3@rewind.io
 ```
 ============================================================
 Starting Jira user/group generation
-Base email: dave.north@rewind.io
+Base email: user@example.com
 User count: 5
 Products: jira-software
 Groups: Test Team 1, Test Team 2
@@ -806,8 +811,8 @@ Groups created: 2
   - Test Team 2
 
 Users invited: 5
-  - dave.north+sandbox1@rewind.io (accountId: abc123)
-  - dave.north+sandbox2@rewind.io (accountId: def456)
+  - user+sandbox1@example.com (accountId: abc123)
+  - user+sandbox2@example.com (accountId: def456)
   ...
 
 Summary:
@@ -847,6 +852,55 @@ jira-test-data-generator/
 └── CLAUDE.md                  # AI agent documentation
 ```
 
+## Development
+
+### Running Tests
+
+The project includes a comprehensive test suite with 90%+ code coverage.
+
+```bash
+# Install test dependencies
+pip install -r requirements-dev.txt
+
+# Run all tests (parallel for speed)
+pytest -n auto
+
+# Run tests with coverage report
+pytest -n auto --cov=generators --cov=jira_data_generator --cov=jira_user_generator
+
+# Run a specific test file
+pytest tests/test_cli.py
+
+# Run tests matching a pattern
+pytest -k "test_dry_run"
+
+# Run only failed tests from last run
+pytest --lf
+```
+
+### Test Structure
+
+```
+tests/
+├── conftest.py              # Shared fixtures
+├── test_base.py             # API client, rate limiting tests
+├── test_benchmark.py        # Benchmark tracking tests
+├── test_checkpoint.py       # Checkpoint/resume tests
+├── test_projects.py         # Project generator tests
+├── test_issues.py           # Issue generator tests
+├── test_issue_items.py      # Comments, worklogs, etc. tests
+├── test_agile.py            # Boards, sprints tests
+├── test_filters.py          # Filters, dashboards tests
+├── test_custom_fields.py    # Custom fields tests
+├── test_jira_data_generator.py  # Main orchestrator tests
+├── test_jira_user_generator.py  # User generator tests
+└── test_cli.py              # CLI entry point tests
+```
+
+### CI/CD
+
+Tests run automatically on GitHub Actions (Python 3.12) on every push and pull request.
+
 ## Contributing
 
 Feel free to extend this! Some ideas:
@@ -877,5 +931,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Support
 
-Questions? Contact the Cloud Ops team or check the Confluence page:
-https://rewind.atlassian.net/wiki/spaces/DEV/pages/4143612121
+Questions or issues? Please [open a GitHub issue](https://github.com/rewindio/jira-test-data-generator/issues).

@@ -7,11 +7,9 @@ Contains rate limiting state, HTTP session management, and core API call logic.
 import asyncio
 import logging
 import random
-import string
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Any, Optional
 
 import aiohttp
 import requests
@@ -22,6 +20,7 @@ from urllib3.util.retry import Retry
 @dataclass
 class RateLimitState:
     """Tracks rate limiting state (shared across async tasks)"""
+
     retry_after: Optional[float] = None
     consecutive_429s: int = 0
     current_delay: float = 1.0
@@ -43,19 +42,73 @@ class JiraAPIClient:
     # Pre-generated text pool for high-performance random text generation
     # Shared across all instances to avoid repeated generation
     _TEXT_POOL_SIZE = 1000  # Number of pre-generated text strings per size category
-    _text_pool: Optional[Dict[str, List[str]]] = None
+    _text_pool: Optional[dict[str, list[str]]] = None
     _text_pool_lock = None  # Will be initialized on first use
 
     # Lorem ipsum words for text generation
     _LOREM_WORDS = [
-        'lorem', 'ipsum', 'dolor', 'sit', 'amet', 'consectetur', 'adipiscing', 'elit',
-        'sed', 'do', 'eiusmod', 'tempor', 'incididunt', 'ut', 'labore', 'et', 'dolore',
-        'magna', 'aliqua', 'enim', 'ad', 'minim', 'veniam', 'quis', 'nostrud',
-        'exercitation', 'ullamco', 'laboris', 'nisi', 'aliquip', 'ex', 'ea', 'commodo',
-        'consequat', 'duis', 'aute', 'irure', 'in', 'reprehenderit', 'voluptate',
-        'velit', 'esse', 'cillum', 'fugiat', 'nulla', 'pariatur', 'excepteur', 'sint',
-        'occaecat', 'cupidatat', 'non', 'proident', 'sunt', 'culpa', 'qui', 'officia',
-        'deserunt', 'mollit', 'anim', 'id', 'est', 'laborum'
+        "lorem",
+        "ipsum",
+        "dolor",
+        "sit",
+        "amet",
+        "consectetur",
+        "adipiscing",
+        "elit",
+        "sed",
+        "do",
+        "eiusmod",
+        "tempor",
+        "incididunt",
+        "ut",
+        "labore",
+        "et",
+        "dolore",
+        "magna",
+        "aliqua",
+        "enim",
+        "ad",
+        "minim",
+        "veniam",
+        "quis",
+        "nostrud",
+        "exercitation",
+        "ullamco",
+        "laboris",
+        "nisi",
+        "aliquip",
+        "ex",
+        "ea",
+        "commodo",
+        "consequat",
+        "duis",
+        "aute",
+        "irure",
+        "in",
+        "reprehenderit",
+        "voluptate",
+        "velit",
+        "esse",
+        "cillum",
+        "fugiat",
+        "nulla",
+        "pariatur",
+        "excepteur",
+        "sint",
+        "occaecat",
+        "cupidatat",
+        "non",
+        "proident",
+        "sunt",
+        "culpa",
+        "qui",
+        "officia",
+        "deserunt",
+        "mollit",
+        "anim",
+        "id",
+        "est",
+        "laborum",
     ]
 
     def __init__(
@@ -66,9 +119,9 @@ class JiraAPIClient:
         dry_run: bool = False,
         concurrency: int = 5,
         benchmark: Optional[Any] = None,
-        request_delay: float = 0.0
+        request_delay: float = 0.0,
     ):
-        self.jira_url = jira_url.rstrip('/')
+        self.jira_url = jira_url.rstrip("/")
         self.email = email
         self.api_token = api_token
         self.dry_run = dry_run
@@ -102,7 +155,7 @@ class JiraAPIClient:
             total=3,
             backoff_factor=1,
             status_forcelist=[500, 502, 503, 504],
-            allowed_methods=["GET", "POST", "PUT", "DELETE"]
+            allowed_methods=["GET", "POST", "PUT", "DELETE"],
         )
 
         # Optimized connection pooling for high-throughput operations
@@ -113,7 +166,7 @@ class JiraAPIClient:
             max_retries=retry_strategy,
             pool_connections=20,
             pool_maxsize=50,
-            pool_block=False  # Don't block, create new connections if pool exhausted
+            pool_block=False,  # Don't block, create new connections if pool exhausted
         )
         session.mount("http://", adapter)
         session.mount("https://", adapter)
@@ -142,7 +195,7 @@ class JiraAPIClient:
             self._record_rate_limit()
 
             # Check for Retry-After header
-            retry_after = response.headers.get('Retry-After')
+            retry_after = response.headers.get("Retry-After")
             if retry_after:
                 try:
                     self.rate_limit.retry_after = float(retry_after)
@@ -151,10 +204,7 @@ class JiraAPIClient:
                     self.rate_limit.retry_after = 60
             else:
                 # Use exponential backoff
-                self.rate_limit.current_delay = min(
-                    self.rate_limit.current_delay * 2,
-                    self.rate_limit.max_delay
-                )
+                self.rate_limit.current_delay = min(self.rate_limit.current_delay * 2, self.rate_limit.max_delay)
                 self.rate_limit.retry_after = self.rate_limit.current_delay
 
             self.logger.warning(
@@ -172,10 +222,10 @@ class JiraAPIClient:
         self,
         method: str,
         endpoint: str,
-        data: Optional[Dict] = None,
-        params: Optional[Dict] = None,
+        data: Optional[dict] = None,
+        params: Optional[dict] = None,
         max_retries: int = 5,
-        base_url: Optional[str] = None
+        base_url: Optional[str] = None,
     ) -> Optional[requests.Response]:
         """Make an API call with rate limit handling.
 
@@ -204,8 +254,8 @@ class JiraAPIClient:
                     json=data,
                     params=params,
                     auth=(self.email, self.api_token),
-                    headers={'Accept': 'application/json', 'Content-Type': 'application/json'},
-                    timeout=30
+                    headers={"Accept": "application/json", "Content-Type": "application/json"},
+                    timeout=30,
                 )
 
                 self._handle_rate_limit(response)
@@ -219,10 +269,10 @@ class JiraAPIClient:
             except requests.exceptions.RequestException as e:
                 # Check if this is an "already exists" error (expected when re-running)
                 is_already_exists = False
-                if hasattr(e, 'response') and e.response is not None:
+                if hasattr(e, "response") and e.response is not None:
                     try:
                         error_text = e.response.text.lower()
-                        is_already_exists = 'already exists' in error_text or 'already a member' in error_text
+                        is_already_exists = "already exists" in error_text or "already a member" in error_text
                     except Exception:
                         pass
 
@@ -233,7 +283,7 @@ class JiraAPIClient:
                     self._record_error()
                     self.logger.error(f"API call failed (attempt {attempt + 1}/{max_retries}): {e}")
                     # Log response body for errors to help debug
-                    if hasattr(e, 'response') and e.response is not None:
+                    if hasattr(e, "response") and e.response is not None:
                         try:
                             error_detail = e.response.text
                             self.logger.error(f"Response body: {error_detail}")
@@ -241,10 +291,10 @@ class JiraAPIClient:
                             pass
 
                 # Don't retry on client errors (4xx) - they won't succeed
-                if hasattr(e, 'response') and e.response is not None and e.response.status_code < 500:
+                if hasattr(e, "response") and e.response is not None and e.response.status_code < 500:
                     return None
                 if attempt < max_retries - 1:
-                    time.sleep(2 ** attempt)  # Exponential backoff
+                    time.sleep(2**attempt)  # Exponential backoff
                 else:
                     return None  # Return None instead of raising
 
@@ -268,20 +318,14 @@ class JiraAPIClient:
             # limit_per_host=50: Connections per host (Jira API)
             # ttl_dns_cache=300: Cache DNS for 5 minutes
             connector = aiohttp.TCPConnector(
-                limit=100,
-                limit_per_host=50,
-                ttl_dns_cache=300,
-                enable_cleanup_closed=True
+                limit=100, limit_per_host=50, ttl_dns_cache=300, enable_cleanup_closed=True
             )
 
             self._async_session = aiohttp.ClientSession(
                 auth=auth,
                 connector=connector,
                 timeout=timeout,
-                headers={
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                }
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
             )
         if self._semaphore is None:
             self._semaphore = asyncio.Semaphore(self.concurrency)
@@ -306,24 +350,21 @@ class JiraAPIClient:
                 self.rate_limit.consecutive_429s += 1
                 self.rate_limit.recent_429_count += 1
 
-                retry_after = headers.get('Retry-After')
+                retry_after = headers.get("Retry-After")
                 if retry_after:
                     try:
                         delay = float(retry_after)
                     except ValueError:
                         delay = 60
                 else:
-                    self.rate_limit.current_delay = min(
-                        self.rate_limit.current_delay * 2,
-                        self.rate_limit.max_delay
-                    )
+                    self.rate_limit.current_delay = min(self.rate_limit.current_delay * 2, self.rate_limit.max_delay)
                     delay = self.rate_limit.current_delay
 
                 # Increase adaptive delay when hitting rate limits
                 # This slows down all future requests to prevent repeated 429s
                 self.rate_limit.adaptive_delay = min(
                     self.rate_limit.adaptive_delay + 0.1,  # Add 100ms per 429
-                    1.0  # Cap at 1 second
+                    1.0,  # Cap at 1 second
                 )
 
                 # Add jitter to prevent thundering herd (±20% of delay)
@@ -347,10 +388,7 @@ class JiraAPIClient:
                 # Gradually reduce adaptive delay on success
                 # Every 10 successes without a 429, reduce by 10ms
                 if self.rate_limit.recent_success_count >= 10:
-                    self.rate_limit.adaptive_delay = max(
-                        0.0,
-                        self.rate_limit.adaptive_delay - 0.01
-                    )
+                    self.rate_limit.adaptive_delay = max(0.0, self.rate_limit.adaptive_delay - 0.01)
                     self.rate_limit.recent_success_count = 0
                     self.rate_limit.recent_429_count = 0
         return 0
@@ -395,11 +433,11 @@ class JiraAPIClient:
         self,
         method: str,
         endpoint: str,
-        data: Optional[Dict] = None,
-        params: Optional[Dict] = None,
+        data: Optional[dict] = None,
+        params: Optional[dict] = None,
         max_retries: int = 5,
-        base_url: Optional[str] = None
-    ) -> Tuple[bool, Optional[Dict]]:
+        base_url: Optional[str] = None,
+    ) -> tuple[bool, Optional[dict]]:
         """Make an async API call with rate limit handling.
 
         Returns (success: bool, response_json: Optional[Dict])
@@ -434,7 +472,9 @@ class JiraAPIClient:
                         if response.status >= 400:
                             error_text = await response.text()
                             # Check if this is an "already exists" error (expected when re-running)
-                            is_already_exists = 'already exists' in error_text.lower() or 'already a member' in error_text.lower()
+                            is_already_exists = (
+                                "already exists" in error_text.lower() or "already a member" in error_text.lower()
+                            )
                             if is_already_exists:
                                 self.logger.debug(f"Item already exists: {endpoint}")
                             else:
@@ -445,7 +485,7 @@ class JiraAPIClient:
                             if response.status < 500:
                                 return (False, None)
                             if attempt < max_retries - 1:
-                                await asyncio.sleep(2 ** attempt)
+                                await asyncio.sleep(2**attempt)
                                 continue
                             return (False, None)
 
@@ -459,7 +499,7 @@ class JiraAPIClient:
                     self._record_error()
                     self.logger.error(f"Async API call failed (attempt {attempt + 1}/{max_retries}): {e}")
                     if attempt < max_retries - 1:
-                        await asyncio.sleep(2 ** attempt)
+                        await asyncio.sleep(2**attempt)
                     else:
                         return (False, None)
 
@@ -470,12 +510,12 @@ class JiraAPIClient:
         if self.dry_run:
             return "dry-run-account-id"
 
-        response = self._api_call('GET', 'myself')
+        response = self._api_call("GET", "myself")
         if response:
-            return response.json().get('accountId')
+            return response.json().get("accountId")
         return None
 
-    def get_all_users(self, max_users: int = 100) -> List[str]:
+    def get_all_users(self, max_users: int = 100) -> list[str]:
         """Fetch users from the Jira instance.
 
         Returns a list of account IDs.
@@ -489,14 +529,7 @@ class JiraAPIClient:
         start_at = 0
 
         while len(users) < max_users:
-            response = self._api_call(
-                'GET',
-                'users/search',
-                params={
-                    'startAt': start_at,
-                    'maxResults': 50
-                }
-            )
+            response = self._api_call("GET", "users/search", params={"startAt": start_at, "maxResults": 50})
 
             if not response:
                 break
@@ -506,9 +539,9 @@ class JiraAPIClient:
                 break
 
             for user in batch:
-                account_id = user.get('accountId')
+                account_id = user.get("accountId")
                 # Filter out inactive users and app users
-                if account_id and user.get('active', True) and user.get('accountType') == 'atlassian':
+                if account_id and user.get("active", True) and user.get("accountType") == "atlassian":
                     users.append(account_id)
 
             if len(batch) < 50:
@@ -536,6 +569,7 @@ class JiraAPIClient:
             return  # Already initialized
 
         import threading
+
         if cls._text_pool_lock is None:
             cls._text_pool_lock = threading.Lock()
 
@@ -544,33 +578,31 @@ class JiraAPIClient:
             if cls._text_pool is not None:
                 return
 
-            logging.getLogger(__name__).debug(
-                f"Pre-generating {cls._TEXT_POOL_SIZE * 3} random text strings..."
-            )
+            logging.getLogger(__name__).debug(f"Pre-generating {cls._TEXT_POOL_SIZE * 3} random text strings...")
 
             cls._text_pool = {
-                'short': [],   # 3-10 words
-                'medium': [],  # 5-15 words
-                'long': []     # 10-30 words
+                "short": [],  # 3-10 words
+                "medium": [],  # 5-15 words
+                "long": [],  # 10-30 words
             }
 
             # Generate short texts (3-10 words)
             for _ in range(cls._TEXT_POOL_SIZE):
                 num_words = random.randint(3, 10)
-                text = ' '.join(random.choices(cls._LOREM_WORDS, k=num_words)).capitalize()
-                cls._text_pool['short'].append(text)
+                text = " ".join(random.choices(cls._LOREM_WORDS, k=num_words)).capitalize()
+                cls._text_pool["short"].append(text)
 
             # Generate medium texts (5-15 words)
             for _ in range(cls._TEXT_POOL_SIZE):
                 num_words = random.randint(5, 15)
-                text = ' '.join(random.choices(cls._LOREM_WORDS, k=num_words)).capitalize()
-                cls._text_pool['medium'].append(text)
+                text = " ".join(random.choices(cls._LOREM_WORDS, k=num_words)).capitalize()
+                cls._text_pool["medium"].append(text)
 
             # Generate long texts (10-30 words)
             for _ in range(cls._TEXT_POOL_SIZE):
                 num_words = random.randint(10, 30)
-                text = ' '.join(random.choices(cls._LOREM_WORDS, k=num_words)).capitalize()
-                cls._text_pool['long'].append(text)
+                text = " ".join(random.choices(cls._LOREM_WORDS, k=num_words)).capitalize()
+                cls._text_pool["long"].append(text)
 
     @classmethod
     def generate_random_text(cls, min_words: int = 5, max_words: int = 20) -> str:
@@ -595,10 +627,10 @@ class JiraAPIClient:
         avg_words = (min_words + max_words) // 2
 
         if avg_words <= 7:
-            pool = cls._text_pool['short']
+            pool = cls._text_pool["short"]
         elif avg_words <= 12:
-            pool = cls._text_pool['medium']
+            pool = cls._text_pool["medium"]
         else:
-            pool = cls._text_pool['long']
+            pool = cls._text_pool["long"]
 
         return random.choice(pool)

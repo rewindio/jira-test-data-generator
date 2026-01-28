@@ -6,14 +6,15 @@ Tracks timing per phase and calculates rates for extrapolation to larger dataset
 
 import logging
 import time
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Optional
 
 
 @dataclass
 class PhaseMetrics:
     """Metrics for a single generation phase."""
+
     name: str
     start_time: Optional[float] = None
     end_time: Optional[float] = None
@@ -68,7 +69,7 @@ class PhaseMetrics:
         if rate >= 1:
             return f"{rate:.1f}/s"
         elif rate > 0:
-            return f"{1/rate:.1f}s/item"
+            return f"{1 / rate:.1f}s/item"
         return "N/A"
 
 
@@ -76,7 +77,7 @@ class BenchmarkTracker:
     """Tracks performance metrics across all generation phases."""
 
     def __init__(self):
-        self.phases: Dict[str, PhaseMetrics] = {}
+        self.phases: dict[str, PhaseMetrics] = {}
         self.overall_start: Optional[float] = None
         self.overall_end: Optional[float] = None
         self.logger = logging.getLogger(__name__)
@@ -159,11 +160,7 @@ class BenchmarkTracker:
             target_count: Target number of items to create
         """
         self._current_phase = phase_name
-        self.phases[phase_name] = PhaseMetrics(
-            name=phase_name,
-            start_time=time.time(),
-            items_target=target_count
-        )
+        self.phases[phase_name] = PhaseMetrics(name=phase_name, start_time=time.time(), items_target=target_count)
 
     def end_phase(self, phase_name: str, items_created: int) -> None:
         """End timing a phase.
@@ -180,8 +177,7 @@ class BenchmarkTracker:
             phase = self.phases[phase_name]
             display_name = self.phase_display_names.get(phase_name, phase_name)
             self.logger.info(
-                f"  {display_name}: {items_created} items in {phase.format_duration()} "
-                f"({phase.format_rate()})"
+                f"  {display_name}: {items_created} items in {phase.format_duration()} ({phase.format_rate()})"
             )
 
         # Clear current phase
@@ -205,7 +201,7 @@ class BenchmarkTracker:
         """Get total items created across all phases."""
         return sum(p.items_created for p in self.phases.values())
 
-    def extrapolate_time(self, target_issues: int, current_issues: int) -> Dict[str, any]:
+    def extrapolate_time(self, target_issues: int, current_issues: int) -> dict[str, any]:
         """Extrapolate time for a larger dataset based on current rates.
 
         Args:
@@ -287,37 +283,39 @@ class BenchmarkTracker:
             if est_seconds < 60:
                 time_str = f"{est_seconds:.0f}s"
             elif est_seconds < 3600:
-                time_str = f"{est_seconds/60:.1f}m"
+                time_str = f"{est_seconds / 60:.1f}m"
             elif est_seconds < 86400:
-                time_str = f"{est_seconds/3600:.1f}h"
+                time_str = f"{est_seconds / 3600:.1f}h"
             else:
-                time_str = f"{est_seconds/86400:.1f}d"
+                time_str = f"{est_seconds / 86400:.1f}d"
 
             lines.append(f"  {display_name}: {est_items:,} items @ {rate:.1f}/s = {time_str}")
 
         # Total time formatting
         total_seconds = data["total_estimated_seconds"]
         if total_seconds < 3600:
-            total_str = f"{total_seconds/60:.1f} minutes"
+            total_str = f"{total_seconds / 60:.1f} minutes"
         elif total_seconds < 86400:
-            total_str = f"{total_seconds/3600:.1f} hours"
+            total_str = f"{total_seconds / 3600:.1f} hours"
         else:
             days = total_seconds / 86400
             hours = (total_seconds % 86400) / 3600
             total_str = f"{days:.0f} days, {hours:.0f} hours"
 
-        lines.extend([
-            "",
-            "-" * 60,
-            f"TOTAL ESTIMATED TIME: {total_str}",
-            "-" * 60,
-            "",
-            "Note: Actual time may vary based on:",
-            "  - Rate limiting (may add 20-50% overhead)",
-            "  - Network latency",
-            "  - Jira instance performance",
-            "  - Concurrency settings",
-        ])
+        lines.extend(
+            [
+                "",
+                "-" * 60,
+                f"TOTAL ESTIMATED TIME: {total_str}",
+                "-" * 60,
+                "",
+                "Note: Actual time may vary based on:",
+                "  - Rate limiting (may add 20-50% overhead)",
+                "  - Network latency",
+                "  - Jira instance performance",
+                "  - Concurrency settings",
+            ]
+        )
 
         return "\n".join(lines)
 
@@ -339,9 +337,9 @@ class BenchmarkTracker:
         if total_duration < 60:
             duration_str = f"{total_duration:.1f} seconds"
         elif total_duration < 3600:
-            duration_str = f"{total_duration/60:.1f} minutes"
+            duration_str = f"{total_duration / 60:.1f} minutes"
         else:
-            duration_str = f"{total_duration/3600:.2f} hours"
+            duration_str = f"{total_duration / 3600:.2f} hours"
 
         lines.append(f"Total duration: {duration_str}")
         lines.append(f"Total items created: {self.total_items_created:,}")
@@ -376,7 +374,9 @@ class BenchmarkTracker:
         lines.append("")
         lines.append("Key rates for extrapolation:")
         if issue_phase and issue_phase.items_per_second > 0:
-            lines.append(f"  Issues: {issue_phase.items_per_second:.2f}/sec ({issue_phase.seconds_per_item:.2f}s per issue)")
+            lines.append(
+                f"  Issues: {issue_phase.items_per_second:.2f}/sec ({issue_phase.seconds_per_item:.2f}s per issue)"
+            )
         if comment_phase and comment_phase.items_per_second > 0:
             lines.append(f"  Comments: {comment_phase.items_per_second:.2f}/sec")
 
@@ -392,7 +392,7 @@ class BenchmarkTracker:
 
         return "\n".join(lines)
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Export benchmark data as dictionary (for JSON serialization)."""
         return {
             "overall_start": datetime.fromtimestamp(self.overall_start).isoformat() if self.overall_start else None,
@@ -416,5 +416,5 @@ class BenchmarkTracker:
                     "errors": m.errors,
                 }
                 for name, m in self.phases.items()
-            }
+            },
         }

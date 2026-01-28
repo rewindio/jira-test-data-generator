@@ -14,6 +14,21 @@ cp .env.example .env
 # Edit .env and add: JIRA_API_TOKEN=your_token_here
 ```
 
+## Running Tests
+```bash
+# Install test dependencies
+pip install -r requirements-dev.txt
+
+# Run all tests (parallel)
+pytest -n auto
+
+# Run with coverage
+pytest -n auto --cov=generators --cov=jira_data_generator --cov=jira_user_generator
+
+# Run specific test file
+pytest tests/test_cli.py -v
+```
+
 ## Most Common Commands
 
 ### Dry Run (Always Do This First!)

@@ -7,32 +7,34 @@ allowing resumption after failures or interruptions.
 
 import json
 import logging
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any, Optional
 
 
 @dataclass
 class PhaseProgress:
     """Tracks progress for a single generation phase."""
+
     status: str = "pending"  # pending, in_progress, complete
     target_count: int = 0
     created_count: int = 0
     # For phases that create named items (projects, boards, etc.)
-    created_items: List[str] = field(default_factory=list)
+    created_items: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "PhaseProgress":
+    def from_dict(cls, data: dict[str, Any]) -> "PhaseProgress":
         return cls(**data)
 
 
 @dataclass
 class CheckpointData:
     """Complete checkpoint state for a generation run."""
+
     # Run identification
     run_id: str
     prefix: str
@@ -49,18 +51,18 @@ class CheckpointData:
     concurrency: int
 
     # Phase progress
-    phases: Dict[str, PhaseProgress] = field(default_factory=dict)
+    phases: dict[str, PhaseProgress] = field(default_factory=dict)
 
     # Critical data needed for resume
-    project_keys: List[str] = field(default_factory=list)
-    project_ids: Dict[str, str] = field(default_factory=dict)  # key -> id mapping
-    issue_keys: List[str] = field(default_factory=list)
-    category_ids: List[str] = field(default_factory=list)
+    project_keys: list[str] = field(default_factory=list)
+    project_ids: dict[str, str] = field(default_factory=dict)  # key -> id mapping
+    issue_keys: list[str] = field(default_factory=list)
+    category_ids: list[str] = field(default_factory=list)
 
     # For large issue counts, track per-project to avoid huge lists
-    issues_per_project: Dict[str, int] = field(default_factory=dict)
+    issues_per_project: dict[str, int] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         result = {
             "run_id": self.run_id,
             "prefix": self.prefix,
@@ -76,12 +78,12 @@ class CheckpointData:
             "issue_keys": self.issue_keys,
             "category_ids": self.category_ids,
             "issues_per_project": self.issues_per_project,
-            "phases": {k: v.to_dict() for k, v in self.phases.items()}
+            "phases": {k: v.to_dict() for k, v in self.phases.items()},
         }
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "CheckpointData":
+    def from_dict(cls, data: dict[str, Any]) -> "CheckpointData":
         phases = {k: PhaseProgress.from_dict(v) for k, v in data.pop("phases", {}).items()}
         return cls(phases=phases, **data)
 
@@ -153,7 +155,7 @@ class CheckpointManager:
         jira_url: str,
         async_mode: bool,
         concurrency: int,
-        counts: Dict[str, int]
+        counts: dict[str, int],
     ) -> CheckpointData:
         """Initialize a new checkpoint for a fresh run.
 
@@ -203,12 +205,7 @@ class CheckpointManager:
             else:
                 target = 0
 
-            phases[phase_name] = PhaseProgress(
-                status="pending",
-                target_count=target,
-                created_count=0,
-                created_items=[]
-            )
+            phases[phase_name] = PhaseProgress(status="pending", target_count=target, created_count=0, created_items=[])
 
         self._checkpoint = CheckpointData(
             run_id=run_id,
@@ -225,7 +222,7 @@ class CheckpointManager:
             project_ids={},
             issue_keys=[],
             category_ids=[],
-            issues_per_project={}
+            issues_per_project={},
         )
 
         # Use prefix-only path for active checkpoint
@@ -252,7 +249,7 @@ class CheckpointManager:
             return None
 
         try:
-            with open(checkpoint_path, 'r') as f:
+            with open(checkpoint_path) as f:
                 data = json.load(f)
 
             self._checkpoint = CheckpointData.from_dict(data)
@@ -285,14 +282,14 @@ class CheckpointManager:
 
         try:
             # Write to temp file first, then rename for atomicity
-            temp_path = self._checkpoint_path.with_suffix('.tmp')
-            with open(temp_path, 'w') as f:
+            temp_path = self._checkpoint_path.with_suffix(".tmp")
+            with open(temp_path, "w") as f:
                 json.dump(self._checkpoint.to_dict(), f, indent=2)
 
             temp_path.replace(self._checkpoint_path)
             return True
 
-        except (IOError, OSError) as e:
+        except OSError as e:
             self.logger.error(f"Failed to save checkpoint: {e}")
             return False
 
@@ -360,7 +357,7 @@ class CheckpointManager:
             if self._checkpoint.phases[phase_name].created_count % 50 == 0:
                 self.save()
 
-    def add_phase_items(self, phase_name: str, items: List[str]) -> None:
+    def add_phase_items(self, phase_name: str, items: list[str]) -> None:
         """Add created items to a phase (for items that need to be tracked).
 
         Args:
@@ -369,22 +366,20 @@ class CheckpointManager:
         """
         if self._checkpoint and phase_name in self._checkpoint.phases:
             self._checkpoint.phases[phase_name].created_items.extend(items)
-            self._checkpoint.phases[phase_name].created_count = len(
-                self._checkpoint.phases[phase_name].created_items
-            )
+            self._checkpoint.phases[phase_name].created_count = len(self._checkpoint.phases[phase_name].created_items)
             self.save()
 
     # ========== Critical Data Updates ==========
 
-    def set_projects(self, projects: List[Dict[str, str]]) -> None:
+    def set_projects(self, projects: list[dict[str, str]]) -> None:
         """Store created projects.
 
         Args:
             projects: List of project dicts with 'key' and 'id'
         """
         if self._checkpoint:
-            self._checkpoint.project_keys = [p['key'] for p in projects]
-            self._checkpoint.project_ids = {p['key']: p['id'] for p in projects}
+            self._checkpoint.project_keys = [p["key"] for p in projects]
+            self._checkpoint.project_ids = {p["key"]: p["id"] for p in projects}
             self.save()
 
     def add_project(self, project_key: str, project_id: str) -> None:
@@ -395,13 +390,13 @@ class CheckpointManager:
             self._checkpoint.project_ids[project_key] = project_id
             self.save()
 
-    def set_categories(self, category_ids: List[str]) -> None:
+    def set_categories(self, category_ids: list[str]) -> None:
         """Store created category IDs."""
         if self._checkpoint:
             self._checkpoint.category_ids = category_ids
             self.save()
 
-    def add_issue_keys(self, issue_keys: List[str], project_key: str) -> None:
+    def add_issue_keys(self, issue_keys: list[str], project_key: str) -> None:
         """Add issue keys to checkpoint.
 
         Args:
@@ -435,7 +430,7 @@ class CheckpointManager:
 
     # ========== Resume Helpers ==========
 
-    def get_issues_needed_per_project(self, projects: List[Dict], total_issues: int) -> Dict[str, int]:
+    def get_issues_needed_per_project(self, projects: list[dict], total_issues: int) -> dict[str, int]:
         """Calculate how many issues still need to be created per project.
 
         Args:
@@ -449,10 +444,7 @@ class CheckpointManager:
             # No checkpoint - create all issues evenly distributed
             per_project = total_issues // len(projects)
             remainder = total_issues % len(projects)
-            return {
-                p['key']: per_project + (1 if i < remainder else 0)
-                for i, p in enumerate(projects)
-            }
+            return {p["key"]: per_project + (1 if i < remainder else 0) for i, p in enumerate(projects)}
 
         # Calculate remaining per project
         existing = self._checkpoint.issues_per_project
@@ -461,7 +453,7 @@ class CheckpointManager:
 
         result = {}
         for i, project in enumerate(projects):
-            key = project['key']
+            key = project["key"]
             target = per_project + (1 if i < remainder else 0)
             created = existing.get(key, 0)
             result[key] = max(0, target - created)
@@ -484,15 +476,11 @@ class CheckpointManager:
         for phase_name in self.PHASE_ORDER:
             progress = self._checkpoint.phases.get(phase_name)
             if progress and progress.target_count > 0:
-                status_icon = {
-                    "complete": "[OK]",
-                    "in_progress": "[>>]",
-                    "pending": "[  ]"
-                }.get(progress.status, "[??]")
-
-                lines.append(
-                    f"  {status_icon} {phase_name}: {progress.created_count}/{progress.target_count}"
+                status_icon = {"complete": "[OK]", "in_progress": "[>>]", "pending": "[  ]"}.get(
+                    progress.status, "[??]"
                 )
+
+                lines.append(f"  {status_icon} {phase_name}: {progress.created_count}/{progress.target_count}")
 
         lines.append("")
         lines.append(f"Projects: {len(self._checkpoint.project_keys)}")

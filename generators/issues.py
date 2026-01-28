@@ -10,14 +10,14 @@ import random
 import string
 import time
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+
+# Import checkpoint type for type hints (avoid circular import)
+from typing import TYPE_CHECKING, Optional
 
 import aiohttp
 
 from .base import JiraAPIClient
 
-# Import checkpoint type for type hints (avoid circular import)
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .checkpoint import CheckpointManager
 
@@ -38,14 +38,14 @@ class IssueGenerator(JiraAPIClient):
         concurrency: int = 5,
         benchmark=None,
         request_delay: float = 0.0,
-        checkpoint: "CheckpointManager" = None
+        checkpoint: "CheckpointManager" = None,
     ):
         super().__init__(jira_url, email, api_token, dry_run, concurrency, benchmark, request_delay)
         self.prefix = prefix
         self.checkpoint = checkpoint
 
         # Track created items
-        self.created_issues: List[str] = []
+        self.created_issues: list[str] = []
 
         # Project context (set dynamically)
         self.project_key: Optional[str] = None
@@ -55,7 +55,7 @@ class IssueGenerator(JiraAPIClient):
         self.run_id = f"{prefix}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
         # Pre-generated attachment pool (created lazily)
-        self._attachment_pool: Optional[List[Tuple[bytes, str]]] = None
+        self._attachment_pool: Optional[list[tuple[bytes, str]]] = None
 
     def set_project_context(self, project_key: str, project_id: str):
         """Set the current project context for issue creation."""
@@ -71,17 +71,17 @@ class IssueGenerator(JiraAPIClient):
             self._project_id = "10000"
             return self._project_id
 
-        response = self._api_call('GET', f'project/{self.project_key}')
+        response = self._api_call("GET", f"project/{self.project_key}")
         if response:
             project_data = response.json()
-            self._project_id = project_data.get('id')
+            self._project_id = project_data.get("id")
             self.logger.debug(f"Fetched project ID: {self._project_id} for key: {self.project_key}")
             return self._project_id
         else:
             self.logger.error(f"Could not fetch project ID for key: {self.project_key}")
             return None
 
-    def create_issues_bulk(self, count: int) -> List[str]:
+    def create_issues_bulk(self, count: int) -> list[str]:
         """Create issues in bulk batches.
 
         Checkpoints after each 50-issue batch to minimize data loss on interruption.
@@ -115,14 +115,14 @@ class IssueGenerator(JiraAPIClient):
                                     "content": [
                                         {
                                             "type": "text",
-                                            "text": f"Test issue created by data generator. {self.generate_random_text(10, 30)}"
+                                            "text": f"Test issue created by data generator. {self.generate_random_text(10, 30)}",
                                         }
-                                    ]
+                                    ],
                                 }
-                            ]
+                            ],
                         },
                         "issuetype": {"name": "Task"},
-                        "labels": [self.run_id, self.prefix]
+                        "labels": [self.run_id, self.prefix],
                     }
                 }
                 issues_data["issueUpdates"].append(issue_data)
@@ -134,13 +134,13 @@ class IssueGenerator(JiraAPIClient):
                     batch_keys.append(f"{self.project_key}-{batch_start + i + 1}")
             else:
                 self.logger.debug(f"Bulk create payload: {issues_data}")
-                response = self._api_call('POST', 'issue/bulk', data=issues_data)
+                response = self._api_call("POST", "issue/bulk", data=issues_data)
 
                 if response:
                     result = response.json()
-                    created = result.get('issues', [])
+                    created = result.get("issues", [])
                     for issue in created:
-                        key = issue.get('key')
+                        key = issue.get("key")
                         if key:
                             batch_keys.append(key)
                             self.logger.info(f"Created issue: {key}")
@@ -158,7 +158,7 @@ class IssueGenerator(JiraAPIClient):
         self.created_issues = issue_keys
         return issue_keys
 
-    async def create_issues_bulk_async(self, count: int, project_key: str, project_id: str) -> List[str]:
+    async def create_issues_bulk_async(self, count: int, project_key: str, project_id: str) -> list[str]:
         """Create issues in bulk batches asynchronously.
 
         This method is designed for parallel execution across multiple projects.
@@ -172,7 +172,9 @@ class IssueGenerator(JiraAPIClient):
         Returns:
             List of created issue keys
         """
-        self.logger.info(f"Creating {count} issues in project {project_key} (async batches of {self.BULK_CREATE_LIMIT})...")
+        self.logger.info(
+            f"Creating {count} issues in project {project_key} (async batches of {self.BULK_CREATE_LIMIT})..."
+        )
 
         if not project_id and not self.dry_run:
             self.logger.error(f"Cannot create issues without valid project ID for {project_key}")
@@ -202,14 +204,14 @@ class IssueGenerator(JiraAPIClient):
                                     "content": [
                                         {
                                             "type": "text",
-                                            "text": f"Test issue created by data generator. {self.generate_random_text(10, 30)}"
+                                            "text": f"Test issue created by data generator. {self.generate_random_text(10, 30)}",
                                         }
-                                    ]
+                                    ],
                                 }
-                            ]
+                            ],
                         },
                         "issuetype": {"name": "Task"},
-                        "labels": [self.run_id, self.prefix]
+                        "labels": [self.run_id, self.prefix],
                     }
                 }
                 issues_data["issueUpdates"].append(issue_data)
@@ -220,12 +222,12 @@ class IssueGenerator(JiraAPIClient):
                 for i in range(batch_size):
                     batch_keys.append(f"{project_key}-{batch_start + i + 1}")
             else:
-                success, result = await self._api_call_async('POST', 'issue/bulk', data=issues_data)
+                success, result = await self._api_call_async("POST", "issue/bulk", data=issues_data)
 
                 if success and result:
-                    created = result.get('issues', [])
+                    created = result.get("issues", [])
                     for issue in created:
-                        key = issue.get('key')
+                        key = issue.get("key")
                         if key:
                             batch_keys.append(key)
 
@@ -238,7 +240,9 @@ class IssueGenerator(JiraAPIClient):
 
             batches_created += 1
             if batches_created % 10 == 0 or batches_created == total_batches:
-                self.logger.info(f"  {project_key}: {len(issue_keys)}/{count} issues created ({batches_created}/{total_batches} batches)")
+                self.logger.info(
+                    f"  {project_key}: {len(issue_keys)}/{count} issues created ({batches_created}/{total_batches} batches)"
+                )
 
         return issue_keys
 
@@ -263,7 +267,7 @@ class IssueGenerator(JiraAPIClient):
         total_size = sum(len(c) for c, _ in self._attachment_pool)
         self.logger.info(f"Attachment pool ready: {self.ATTACHMENT_POOL_SIZE} files, {total_size / 1024:.1f} KB total")
 
-    def _generate_small_file(self, index: int) -> Tuple[bytes, str]:
+    def _generate_small_file(self, index: int) -> tuple[bytes, str]:
         """Generate a small file (1-5 KB) for the attachment pool.
 
         Args:
@@ -274,41 +278,43 @@ class IssueGenerator(JiraAPIClient):
         size_bytes = random.randint(1 * 1024, 5 * 1024)  # 1-5 KB
 
         file_types = [
-            ('txt', 'text/plain'),
-            ('json', 'application/json'),
-            ('csv', 'text/csv'),
-            ('log', 'text/plain'),
+            ("txt", "text/plain"),
+            ("json", "application/json"),
+            ("csv", "text/csv"),
+            ("log", "text/plain"),
         ]
         ext, _ = random.choice(file_types)
 
-        if ext == 'json':
+        if ext == "json":
             data = {
-                'id': index,
-                'name': self.generate_random_text(2, 5),
-                'description': self.generate_random_text(10, 30),
-                'values': [random.randint(1, 100) for _ in range(10)],
-                'prefix': self.prefix
+                "id": index,
+                "name": self.generate_random_text(2, 5),
+                "description": self.generate_random_text(10, 30),
+                "values": [random.randint(1, 100) for _ in range(10)],
+                "prefix": self.prefix,
             }
-            content = json.dumps(data, indent=2).encode('utf-8')
+            content = json.dumps(data, indent=2).encode("utf-8")
             if len(content) < size_bytes:
-                padding = ''.join(random.choices(string.ascii_letters + string.digits, k=size_bytes - len(content)))
-                content = content[:-1] + f', "padding": "{padding}"}}'.encode('utf-8')
-        elif ext == 'csv':
-            lines = ['id,name,value,data']
-            while len('\n'.join(lines).encode('utf-8')) < size_bytes:
-                lines.append(f'{random.randint(1,10000)},{self.generate_random_text(1,3)},{random.randint(1,1000)},data')
-            content = '\n'.join(lines).encode('utf-8')
+                padding = "".join(random.choices(string.ascii_letters + string.digits, k=size_bytes - len(content)))
+                content = content[:-1] + f', "padding": "{padding}"}}'.encode()
+        elif ext == "csv":
+            lines = ["id,name,value,data"]
+            while len("\n".join(lines).encode("utf-8")) < size_bytes:
+                lines.append(
+                    f"{random.randint(1, 10000)},{self.generate_random_text(1, 3)},{random.randint(1, 1000)},data"
+                )
+            content = "\n".join(lines).encode("utf-8")
         else:
             words = []
-            while len(' '.join(words).encode('utf-8')) < size_bytes:
+            while len(" ".join(words).encode("utf-8")) < size_bytes:
                 words.append(self.generate_random_text(5, 20))
-            content = ' '.join(words).encode('utf-8')
+            content = " ".join(words).encode("utf-8")
 
         content = content[:size_bytes]
         filename = f"{self.prefix}_file_{index:04d}.{ext}"
         return content, filename
 
-    def get_pooled_attachment(self) -> Tuple[bytes, str]:
+    def get_pooled_attachment(self) -> tuple[bytes, str]:
         """Get a random attachment from the pre-generated pool.
 
         Initializes the pool on first call. Returns a tuple of (content, filename).
@@ -319,12 +325,12 @@ class IssueGenerator(JiraAPIClient):
         content, base_filename = random.choice(self._attachment_pool)
 
         # Add random suffix to filename to make it unique per upload
-        name, ext = base_filename.rsplit('.', 1)
+        name, ext = base_filename.rsplit(".", 1)
         unique_filename = f"{name}_{random.randint(10000, 99999)}.{ext}"
 
         return content, unique_filename
 
-    def generate_random_file(self, min_size_kb: int = 1, max_size_kb: int = 100) -> Tuple[bytes, str]:
+    def generate_random_file(self, min_size_kb: int = 1, max_size_kb: int = 100) -> tuple[bytes, str]:
         """Generate random file content with a random size.
 
         DEPRECATED: Use get_pooled_attachment() instead for better performance.
@@ -334,38 +340,37 @@ class IssueGenerator(JiraAPIClient):
         size_bytes = random.randint(min_size_kb * 1024, max_size_kb * 1024)
 
         file_types = [
-            ('txt', 'text/plain'),
-            ('json', 'application/json'),
-            ('csv', 'text/csv'),
-            ('log', 'text/plain'),
+            ("txt", "text/plain"),
+            ("json", "application/json"),
+            ("csv", "text/csv"),
+            ("log", "text/plain"),
         ]
         ext, _ = random.choice(file_types)
 
-        if ext == 'json':
+        if ext == "json":
             data = {
-                'id': random.randint(1, 10000),
-                'name': self.generate_random_text(2, 5),
-                'description': self.generate_random_text(10, 30),
-                'values': [random.randint(1, 100) for _ in range(10)],
-                'metadata': {
-                    'created': datetime.now().isoformat(),
-                    'prefix': self.prefix
-                }
+                "id": random.randint(1, 10000),
+                "name": self.generate_random_text(2, 5),
+                "description": self.generate_random_text(10, 30),
+                "values": [random.randint(1, 100) for _ in range(10)],
+                "metadata": {"created": datetime.now().isoformat(), "prefix": self.prefix},
             }
-            content = json.dumps(data, indent=2).encode('utf-8')
+            content = json.dumps(data, indent=2).encode("utf-8")
             if len(content) < size_bytes:
-                padding = ''.join(random.choices(string.ascii_letters + string.digits, k=size_bytes - len(content)))
-                content = content[:-1] + f', "padding": "{padding}"}}'.encode('utf-8')
-        elif ext == 'csv':
-            lines = ['id,name,value,timestamp']
-            while len('\n'.join(lines).encode('utf-8')) < size_bytes:
-                lines.append(f'{random.randint(1,10000)},{self.generate_random_text(1,3)},{random.randint(1,1000)},{datetime.now().isoformat()}')
-            content = '\n'.join(lines).encode('utf-8')
+                padding = "".join(random.choices(string.ascii_letters + string.digits, k=size_bytes - len(content)))
+                content = content[:-1] + f', "padding": "{padding}"}}'.encode()
+        elif ext == "csv":
+            lines = ["id,name,value,timestamp"]
+            while len("\n".join(lines).encode("utf-8")) < size_bytes:
+                lines.append(
+                    f"{random.randint(1, 10000)},{self.generate_random_text(1, 3)},{random.randint(1, 1000)},{datetime.now().isoformat()}"
+                )
+            content = "\n".join(lines).encode("utf-8")
         else:
             words = []
-            while len(' '.join(words).encode('utf-8')) < size_bytes:
+            while len(" ".join(words).encode("utf-8")) < size_bytes:
                 words.append(self.generate_random_text(5, 20))
-            content = ' '.join(words).encode('utf-8')
+            content = " ".join(words).encode("utf-8")
 
         content = content[:size_bytes]
         filename = f"{self.prefix}_attachment_{random.randint(1000, 9999)}.{ext}"
@@ -384,14 +389,14 @@ class IssueGenerator(JiraAPIClient):
             try:
                 response = self.session.post(
                     url,
-                    files={'file': (filename, content)},
-                    headers={'X-Atlassian-Token': 'no-check'},
+                    files={"file": (filename, content)},
+                    headers={"X-Atlassian-Token": "no-check"},
                     auth=(self.email, self.api_token),
-                    timeout=60
+                    timeout=60,
                 )
 
                 if response.status_code == 429:
-                    retry_after = float(response.headers.get('Retry-After', 30))
+                    retry_after = float(response.headers.get("Retry-After", 30))
                     self.logger.warning(f"Rate limited. Waiting {retry_after}s...")
                     time.sleep(retry_after)
                     continue  # Retry within the loop
@@ -401,10 +406,10 @@ class IssueGenerator(JiraAPIClient):
 
             except Exception as e:
                 is_expected = False
-                if hasattr(e, 'response') and e.response is not None:
+                if hasattr(e, "response") and e.response is not None:
                     try:
                         error_text = e.response.text.lower()
-                        is_expected = 'already exists' in error_text
+                        is_expected = "already exists" in error_text
                     except Exception:
                         pass
 
@@ -414,13 +419,13 @@ class IssueGenerator(JiraAPIClient):
 
                 self.logger.error(f"Failed to attach {filename} to {issue_key}: {e}")
                 if attempt < max_retries - 1:
-                    time.sleep(2 ** attempt)
+                    time.sleep(2**attempt)
                     continue
                 return False
 
         return False
 
-    def create_attachments(self, issue_keys: List[str], count: int) -> int:
+    def create_attachments(self, issue_keys: list[str], count: int) -> int:
         """Create attachments on issues using pre-generated pool."""
         # Initialize pool (logs info about pool)
         self._init_attachment_pool()
@@ -452,7 +457,11 @@ class IssueGenerator(JiraAPIClient):
         (X-Atlassian-Token and multipart/form-data) than the JSON API calls.
         Reusing the session avoids connection overhead for each upload.
         """
-        if not hasattr(self, '_attachment_session') or self._attachment_session is None or self._attachment_session.closed:
+        if (
+            not hasattr(self, "_attachment_session")
+            or self._attachment_session is None
+            or self._attachment_session.closed
+        ):
             auth = aiohttp.BasicAuth(self.email, self.api_token)
             # Use a connector with higher limits for attachment uploads
             connector = aiohttp.TCPConnector(limit=50, limit_per_host=20)
@@ -460,13 +469,13 @@ class IssueGenerator(JiraAPIClient):
                 auth=auth,
                 connector=connector,
                 timeout=aiohttp.ClientTimeout(total=60),
-                headers={'X-Atlassian-Token': 'no-check'}
+                headers={"X-Atlassian-Token": "no-check"},
             )
         return self._attachment_session
 
     async def _close_attachment_session(self):
         """Close the dedicated attachment session."""
-        if hasattr(self, '_attachment_session') and self._attachment_session and not self._attachment_session.closed:
+        if hasattr(self, "_attachment_session") and self._attachment_session and not self._attachment_session.closed:
             await self._attachment_session.close()
 
     async def add_attachment_async(self, issue_key: str, content: bytes, filename: str) -> bool:
@@ -493,7 +502,7 @@ class IssueGenerator(JiraAPIClient):
                 try:
                     # Create form data for this upload
                     data = aiohttp.FormData()
-                    data.add_field('file', content, filename=filename, content_type='application/octet-stream')
+                    data.add_field("file", content, filename=filename, content_type="application/octet-stream")
 
                     async with session.post(url, data=data) as response:
                         if response.status == 429:
@@ -503,8 +512,10 @@ class IssueGenerator(JiraAPIClient):
 
                         if response.status >= 400:
                             error_text = await response.text()
-                            if 'already exists' not in error_text.lower():
-                                self.logger.error(f"Failed to attach {filename} to {issue_key}: {response.status} - {error_text[:200]}")
+                            if "already exists" not in error_text.lower():
+                                self.logger.error(
+                                    f"Failed to attach {filename} to {issue_key}: {response.status} - {error_text[:200]}"
+                                )
                             return False
 
                         return True
@@ -512,7 +523,7 @@ class IssueGenerator(JiraAPIClient):
                 except aiohttp.ClientError as e:
                     self.logger.error(f"Failed to attach {filename} to {issue_key}: ClientError - {e}")
                     if attempt < max_retries - 1:
-                        await asyncio.sleep(2 ** attempt)
+                        await asyncio.sleep(2**attempt)
                         continue
                     return False
                 except Exception as e:
@@ -521,7 +532,7 @@ class IssueGenerator(JiraAPIClient):
 
         return False
 
-    async def create_attachments_async(self, issue_keys: List[str], count: int, start_count: int = 0) -> int:
+    async def create_attachments_async(self, issue_keys: list[str], count: int, start_count: int = 0) -> int:
         """Create attachments on issues concurrently using pre-generated pool.
 
         Uses memory-efficient batching to avoid creating all tasks upfront,
@@ -536,7 +547,9 @@ class IssueGenerator(JiraAPIClient):
         # Initialize pool (logs info about pool)
         self._init_attachment_pool()
 
-        self.logger.info(f"Creating {count} attachments (concurrency: {self.concurrency}, using pooled 1-5 KB files)...")
+        self.logger.info(
+            f"Creating {count} attachments (concurrency: {self.concurrency}, using pooled 1-5 KB files)..."
+        )
 
         created = 0
         failed = 0
