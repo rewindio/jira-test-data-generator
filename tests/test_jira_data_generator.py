@@ -2,7 +2,6 @@
 Unit tests for jira_data_generator.py - JiraDataGenerator main orchestrator.
 """
 
-
 import pytest
 import responses
 
@@ -73,12 +72,7 @@ class TestJiraDataGeneratorInit:
 
     def test_init_basic(self):
         """Test basic initialization."""
-        generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST"
-        )
+        generator = JiraDataGenerator(jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST")
 
         assert generator.jira_url == JIRA_URL
         assert generator.email == TEST_EMAIL
@@ -88,12 +82,7 @@ class TestJiraDataGeneratorInit:
 
     def test_init_url_normalization(self):
         """Test URL trailing slash is removed."""
-        generator = JiraDataGenerator(
-            jira_url=f"{JIRA_URL}/",
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST"
-        )
+        generator = JiraDataGenerator(jira_url=f"{JIRA_URL}/", email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST")
 
         assert generator.jira_url == JIRA_URL
 
@@ -109,7 +98,7 @@ class TestJiraDataGeneratorInit:
             concurrency=10,
             request_delay=0.1,
             issues_only=True,
-            project_override=5
+            project_override=5,
         )
 
         assert generator.size_bucket == "large"
@@ -123,22 +112,13 @@ class TestJiraDataGeneratorInit:
         """Test initialization with invalid size bucket."""
         with pytest.raises(ValueError) as exc_info:
             JiraDataGenerator(
-                jira_url=JIRA_URL,
-                email=TEST_EMAIL,
-                api_token=TEST_TOKEN,
-                prefix="TEST",
-                size_bucket="invalid"
+                jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", size_bucket="invalid"
             )
         assert "Invalid size bucket" in str(exc_info.value)
 
     def test_init_creates_generators(self):
         """Test initialization creates generator modules."""
-        generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST"
-        )
+        generator = JiraDataGenerator(jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST")
 
         assert generator.project_gen is not None
         assert generator.issue_gen is not None
@@ -149,12 +129,7 @@ class TestJiraDataGeneratorInit:
 
     def test_init_creates_benchmark(self):
         """Test initialization creates benchmark tracker."""
-        generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST"
-        )
+        generator = JiraDataGenerator(jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST")
 
         assert generator.benchmark is not None
 
@@ -163,11 +138,7 @@ class TestJiraDataGeneratorInit:
         checkpoint = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
 
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            checkpoint_manager=checkpoint
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", checkpoint_manager=checkpoint
         )
 
         assert generator.checkpoint is checkpoint
@@ -179,11 +150,7 @@ class TestJiraDataGeneratorCalculateCounts:
     def test_calculate_counts_basic(self):
         """Test basic count calculation."""
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            size_bucket="small"
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", size_bucket="small"
         )
 
         counts = generator.calculate_counts(100)
@@ -194,12 +161,7 @@ class TestJiraDataGeneratorCalculateCounts:
 
     def test_calculate_counts_minimum_one(self):
         """Test counts are at least 1."""
-        generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST"
-        )
+        generator = JiraDataGenerator(jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST")
 
         counts = generator.calculate_counts(10)
 
@@ -209,11 +171,7 @@ class TestJiraDataGeneratorCalculateCounts:
     def test_calculate_counts_issues_only(self):
         """Test calculate_counts in issues_only mode."""
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            issues_only=True
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", issues_only=True
         )
 
         counts = generator.calculate_counts(100)
@@ -229,11 +187,7 @@ class TestJiraDataGeneratorCalculateCounts:
     def test_calculate_counts_project_override(self):
         """Test calculate_counts with project override."""
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            project_override=10
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", project_override=10
         )
 
         counts = generator.calculate_counts(100)
@@ -243,18 +197,10 @@ class TestJiraDataGeneratorCalculateCounts:
     def test_calculate_counts_different_sizes(self):
         """Test calculate_counts varies by size."""
         small_gen = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            size_bucket="small"
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", size_bucket="small"
         )
         large_gen = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            size_bucket="large"
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", size_bucket="large"
         )
 
         small_counts = small_gen.calculate_counts(1000)
@@ -269,12 +215,7 @@ class TestJiraDataGeneratorCheckpointHelpers:
 
     def test_is_phase_complete_no_checkpoint(self):
         """Test _is_phase_complete without checkpoint."""
-        generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST"
-        )
+        generator = JiraDataGenerator(jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST")
 
         assert generator._is_phase_complete("issues") is False
 
@@ -282,17 +223,18 @@ class TestJiraDataGeneratorCheckpointHelpers:
         """Test _is_phase_complete with checkpoint."""
         checkpoint = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         checkpoint.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url=JIRA_URL, async_mode=True, concurrency=5, counts={}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url=JIRA_URL,
+            async_mode=True,
+            concurrency=5,
+            counts={},
         )
         checkpoint.complete_phase("projects")
 
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            checkpoint_manager=checkpoint
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", checkpoint_manager=checkpoint
         )
 
         assert generator._is_phase_complete("projects") is True
@@ -300,12 +242,7 @@ class TestJiraDataGeneratorCheckpointHelpers:
 
     def test_get_remaining_count_no_checkpoint(self):
         """Test _get_remaining_count without checkpoint."""
-        generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST"
-        )
+        generator = JiraDataGenerator(jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST")
 
         assert generator._get_remaining_count("comments", 480) == 480
 
@@ -313,18 +250,18 @@ class TestJiraDataGeneratorCheckpointHelpers:
         """Test _get_remaining_count with partial progress."""
         checkpoint = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         checkpoint.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url=JIRA_URL, async_mode=True, concurrency=5,
-            counts={"comment": 480}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url=JIRA_URL,
+            async_mode=True,
+            concurrency=5,
+            counts={"comment": 480},
         )
         checkpoint._checkpoint.phases["comments"].created_count = 200
 
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            checkpoint_manager=checkpoint
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", checkpoint_manager=checkpoint
         )
 
         assert generator._get_remaining_count("comments", 480) == 280
@@ -336,11 +273,7 @@ class TestJiraDataGeneratorDryRun:
     def test_generate_all_dry_run(self):
         """Test generate_all in dry run mode."""
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            dry_run=True
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", dry_run=True
         )
 
         # Should complete without making actual API calls
@@ -353,11 +286,7 @@ class TestJiraDataGeneratorDryRun:
     async def test_generate_all_async_dry_run(self):
         """Test generate_all_async in dry run mode."""
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            dry_run=True
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", dry_run=True
         )
 
         # Should complete without making actual API calls
@@ -373,11 +302,7 @@ class TestJiraDataGeneratorLogging:
     def test_log_header(self, caplog):
         """Test _log_header output."""
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            dry_run=True
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", dry_run=True
         )
 
         with caplog.at_level("INFO"):
@@ -389,12 +314,7 @@ class TestJiraDataGeneratorLogging:
     def test_log_header_issues_only(self, caplog):
         """Test _log_header shows issues_only mode."""
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            dry_run=True,
-            issues_only=True
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", dry_run=True, issues_only=True
         )
 
         with caplog.at_level("INFO"):
@@ -404,12 +324,7 @@ class TestJiraDataGeneratorLogging:
 
     def test_log_planned_counts(self, caplog):
         """Test _log_planned_counts output."""
-        generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST"
-        )
+        generator = JiraDataGenerator(jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST")
 
         counts = generator.calculate_counts(100)
 
@@ -420,12 +335,7 @@ class TestJiraDataGeneratorLogging:
 
     def test_log_footer(self, caplog):
         """Test _log_footer output."""
-        generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST"
-        )
+        generator = JiraDataGenerator(jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST")
 
         generator.benchmark.start_overall()
         generator.benchmark.end_overall()
@@ -446,11 +356,7 @@ class TestJiraDataGeneratorCategoryAssignment:
     def test_assign_projects_to_categories_empty(self, caplog):
         """Test _assign_projects_to_categories with no categories."""
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            dry_run=True
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", dry_run=True
         )
 
         # Should not raise
@@ -459,18 +365,11 @@ class TestJiraDataGeneratorCategoryAssignment:
     def test_assign_projects_to_categories(self, caplog):
         """Test _assign_projects_to_categories."""
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            dry_run=True
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", dry_run=True
         )
 
         with caplog.at_level("INFO"):
-            generator._assign_projects_to_categories(
-                ["TEST1", "TEST2"],
-                [{"id": "10001"}, {"id": "10002"}]
-            )
+            generator._assign_projects_to_categories(["TEST1", "TEST2"], [{"id": "10001"}, {"id": "10002"}])
 
         assert "Assigning" in caplog.text
 
@@ -481,11 +380,7 @@ class TestJiraDataGeneratorFetchIssueKeys:
     def test_fetch_issue_keys_dry_run(self):
         """Test _fetch_issue_keys_from_jira in dry run."""
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            dry_run=True
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", dry_run=True
         )
 
         keys = generator._fetch_issue_keys_from_jira()
@@ -500,15 +395,10 @@ class TestJiraDataGeneratorFetchIssueKeys:
             responses.GET,
             f"{JIRA_URL}/rest/api/3/search",
             json={"issues": [{"key": f"TEST1-{i}"} for i in range(1, 51)]},
-            status=200
+            status=200,
         )
 
-        generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST"
-        )
+        generator = JiraDataGenerator(jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST")
 
         keys = generator._fetch_issue_keys_from_jira()
 
@@ -521,11 +411,7 @@ class TestJiraDataGeneratorSyncMode:
     def test_generate_all_sync_dry_run(self):
         """Test generate_all in sync mode with dry run."""
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            dry_run=True
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", dry_run=True
         )
 
         # Should complete without making actual API calls
@@ -537,12 +423,7 @@ class TestJiraDataGeneratorSyncMode:
     def test_generate_all_issues_only_sync_dry_run(self):
         """Test generate_all sync with issues_only in dry run."""
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            dry_run=True,
-            issues_only=True
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", dry_run=True, issues_only=True
         )
 
         generator.generate_all(10)
@@ -556,24 +437,14 @@ class TestJiraDataGeneratorRunId:
 
     def test_run_id_generated(self):
         """Test run_id is generated."""
-        generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST"
-        )
+        generator = JiraDataGenerator(jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST")
 
         assert generator.run_id is not None
         assert generator.run_id.startswith("TEST-")
 
     def test_run_id_propagated_to_generators(self):
         """Test run_id is propagated to key generator modules."""
-        generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST"
-        )
+        generator = JiraDataGenerator(jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST")
 
         # These generators have run_id explicitly set
         assert generator.project_gen.run_id == generator.run_id
@@ -588,25 +459,16 @@ class TestJiraDataGeneratorBenchmark:
 
     def test_benchmark_created(self):
         """Test benchmark is created on init."""
-        generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST"
-        )
+        generator = JiraDataGenerator(jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST")
 
         assert generator.benchmark is not None
         from generators.benchmark import BenchmarkTracker
+
         assert isinstance(generator.benchmark, BenchmarkTracker)
 
     def test_benchmark_passed_to_generators(self):
         """Test benchmark is passed to all generators."""
-        generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST"
-        )
+        generator = JiraDataGenerator(jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST")
 
         # All generators should have the same benchmark
         assert generator.project_gen.benchmark is generator.benchmark
@@ -623,11 +485,7 @@ class TestJiraDataGeneratorHelpers:
     def test_complete_phase(self):
         """Test _complete_phase helper."""
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            dry_run=True
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", dry_run=True
         )
 
         # Should not raise even without checkpoint
@@ -636,11 +494,7 @@ class TestJiraDataGeneratorHelpers:
     def test_is_phase_complete_no_checkpoint(self):
         """Test _is_phase_complete without checkpoint."""
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            dry_run=True
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", dry_run=True
         )
 
         # Should return False when no checkpoint
@@ -649,11 +503,7 @@ class TestJiraDataGeneratorHelpers:
     def test_get_remaining_count_no_checkpoint(self):
         """Test _get_remaining_count without checkpoint."""
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            dry_run=True
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", dry_run=True
         )
 
         # Should return full count when no checkpoint
@@ -665,12 +515,7 @@ class TestJiraDataGeneratorGeneratorModules:
 
     def test_all_generators_initialized(self):
         """Test all generator modules are initialized."""
-        generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST"
-        )
+        generator = JiraDataGenerator(jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST")
 
         assert generator.project_gen is not None
         assert generator.issue_gen is not None
@@ -681,12 +526,7 @@ class TestJiraDataGeneratorGeneratorModules:
 
     def test_generators_have_correct_prefix(self):
         """Test all generators have correct prefix."""
-        generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="MYPREFIX"
-        )
+        generator = JiraDataGenerator(jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="MYPREFIX")
 
         assert generator.project_gen.prefix == "MYPREFIX"
         assert generator.issue_gen.prefix == "MYPREFIX"
@@ -695,11 +535,7 @@ class TestJiraDataGeneratorGeneratorModules:
     def test_generators_share_concurrency_setting(self):
         """Test generators share concurrency setting."""
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            concurrency=15
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", concurrency=15
         )
 
         assert generator.project_gen.concurrency == 15
@@ -709,11 +545,7 @@ class TestJiraDataGeneratorGeneratorModules:
     def test_generators_share_request_delay(self):
         """Test generators share request_delay setting."""
         generator = JiraDataGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            prefix="TEST",
-            request_delay=0.1
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", request_delay=0.1
         )
 
         assert generator.project_gen.request_delay == 0.1
@@ -728,23 +560,17 @@ class TestJiraDataGeneratorSizeBuckets:
         """Test all valid size buckets can be used."""
         for size in ["small", "medium", "large", "xlarge"]:
             generator = JiraDataGenerator(
-                jira_url=JIRA_URL,
-                email=TEST_EMAIL,
-                api_token=TEST_TOKEN,
-                prefix="TEST",
-                size_bucket=size
+                jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", size_bucket=size
             )
             assert generator.size_bucket == size
 
     def test_counts_vary_by_size(self):
         """Test counts vary by size bucket."""
         small_gen = JiraDataGenerator(
-            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN,
-            prefix="TEST", size_bucket="small"
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", size_bucket="small"
         )
         xlarge_gen = JiraDataGenerator(
-            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN,
-            prefix="TEST", size_bucket="xlarge"
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, prefix="TEST", size_bucket="xlarge"
         )
 
         small_counts = small_gen.calculate_counts(1000)

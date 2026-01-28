@@ -23,16 +23,19 @@ TEST_PREFIX = "TEST"
 
 # ========== Fixture: Reset class-level state ==========
 
+
 @pytest.fixture(autouse=True)
 def reset_text_pool():
     """Reset the text pool before each test to ensure isolation."""
     from generators.base import JiraAPIClient
+
     JiraAPIClient._text_pool = None
     JiraAPIClient._text_pool_lock = None
     yield
 
 
 # ========== Fixture: Mock HTTP responses ==========
+
 
 @pytest.fixture
 def mock_responses():
@@ -50,6 +53,7 @@ def mock_aioresponses():
 
 # ========== Fixture: Temporary directories ==========
 
+
 @pytest.fixture
 def temp_checkpoint_dir(tmp_path):
     """Provide a temporary directory for checkpoint files."""
@@ -58,14 +62,11 @@ def temp_checkpoint_dir(tmp_path):
 
 # ========== Fixture: Sample data ==========
 
+
 @pytest.fixture
 def sample_project():
     """Sample project data."""
-    return {
-        "key": "TEST1",
-        "id": "10001",
-        "name": "Test Project 1"
-    }
+    return {"key": "TEST1", "id": "10001", "name": "Test Project 1"}
 
 
 @pytest.fixture
@@ -92,11 +93,7 @@ def sample_user_ids():
 @pytest.fixture
 def sample_board():
     """Sample board data."""
-    return {
-        "id": 1,
-        "name": "TEST Scrum Board 1",
-        "type": "scrum"
-    }
+    return {"id": 1, "name": "TEST Scrum Board 1", "type": "scrum"}
 
 
 @pytest.fixture
@@ -111,31 +108,19 @@ def sample_boards():
 @pytest.fixture
 def sample_sprint():
     """Sample sprint data."""
-    return {
-        "id": 1,
-        "name": "TEST Sprint 1",
-        "state": "future",
-        "originBoardId": 1
-    }
+    return {"id": 1, "name": "TEST Sprint 1", "state": "future", "originBoardId": 1}
 
 
 @pytest.fixture
 def sample_filter():
     """Sample filter data."""
-    return {
-        "id": "10001",
-        "name": "TEST Filter 1",
-        "jql": "project = TEST1"
-    }
+    return {"id": "10001", "name": "TEST Filter 1", "jql": "project = TEST1"}
 
 
 @pytest.fixture
 def sample_dashboard():
     """Sample dashboard data."""
-    return {
-        "id": "10001",
-        "name": "TEST Dashboard 1"
-    }
+    return {"id": "10001", "name": "TEST Dashboard 1"}
 
 
 @pytest.fixture
@@ -144,38 +129,30 @@ def sample_custom_field():
     return {
         "id": "customfield_10001",
         "name": "TEST Text Field 1",
-        "type": "com.atlassian.jira.plugin.system.customfieldtypes:textfield"
+        "type": "com.atlassian.jira.plugin.system.customfieldtypes:textfield",
     }
 
 
 @pytest.fixture
 def sample_category():
     """Sample project category data."""
-    return {
-        "id": "10001",
-        "name": "TEST Development 1"
-    }
+    return {"id": "10001", "name": "TEST Development 1"}
 
 
 @pytest.fixture
 def sample_version():
     """Sample version data."""
-    return {
-        "id": "10001",
-        "name": "TEST v1.0"
-    }
+    return {"id": "10001", "name": "TEST v1.0"}
 
 
 @pytest.fixture
 def sample_component():
     """Sample component data."""
-    return {
-        "id": "10001",
-        "name": "TEST-Component-1"
-    }
+    return {"id": "10001", "name": "TEST-Component-1"}
 
 
 # ========== Fixture: Multipliers ==========
+
 
 @pytest.fixture
 def sample_multipliers():
@@ -199,12 +176,13 @@ def sample_multipliers():
             "sprint": 0.05,
             "filter": 0.056,
             "dashboard": 0.0087,
-            "issue_field": 0.12
+            "issue_field": 0.12,
         }
     }
 
 
 # ========== Fixture: CSV content ==========
+
 
 @pytest.fixture
 def sample_csv_content():
@@ -233,6 +211,7 @@ issue_field,0.12,0.11,0.05,0.005
 
 # ========== Fixture: Checkpoint data ==========
 
+
 @pytest.fixture
 def sample_checkpoint_data():
     """Sample checkpoint data structure."""
@@ -256,15 +235,17 @@ def sample_checkpoint_data():
             "projects": {"status": "complete", "target_count": 2, "created_count": 2, "created_items": []},
             "issues": {"status": "in_progress", "target_count": 100, "created_count": 50, "created_items": []},
             "comments": {"status": "pending", "target_count": 480, "created_count": 0, "created_items": []},
-        }
+        },
     }
 
 
 # ========== Fixture: Mock Jira API responses ==========
 
+
 @pytest.fixture
 def jira_api_responses():
     """Common Jira API response builders."""
+
     class JiraAPIResponses:
         @staticmethod
         def myself_response():
@@ -272,10 +253,7 @@ def jira_api_responses():
 
         @staticmethod
         def users_response(count=5):
-            return [
-                {"accountId": f"user-{i}", "active": True, "accountType": "atlassian"}
-                for i in range(1, count + 1)
-            ]
+            return [{"accountId": f"user-{i}", "active": True, "accountType": "atlassian"} for i in range(1, count + 1)]
 
         @staticmethod
         def project_response(key="TEST1", project_id="10001"):
@@ -285,7 +263,7 @@ def jira_api_responses():
         def project_roles_response():
             return {
                 "Administrators": f"{JIRA_URL}/rest/api/3/project/TEST1/role/10002",
-                "Developers": f"{JIRA_URL}/rest/api/3/project/TEST1/role/10003"
+                "Developers": f"{JIRA_URL}/rest/api/3/project/TEST1/role/10003",
             }
 
         @staticmethod
@@ -337,6 +315,7 @@ def jira_api_responses():
 
 # ========== Fixture: Base client setup ==========
 
+
 @pytest.fixture
 def base_client_kwargs():
     """Common kwargs for creating test clients."""
@@ -347,7 +326,7 @@ def base_client_kwargs():
         "dry_run": False,
         "concurrency": 5,
         "benchmark": None,
-        "request_delay": 0.0
+        "request_delay": 0.0,
     }
 
 

@@ -21,10 +21,7 @@ class TestPhaseProgress:
     def test_init_with_values(self):
         """Test PhaseProgress with explicit values."""
         progress = PhaseProgress(
-            status="in_progress",
-            target_count=100,
-            created_count=50,
-            created_items=["item1", "item2"]
+            status="in_progress", target_count=100, created_count=50, created_items=["item1", "item2"]
         )
         assert progress.status == "in_progress"
         assert progress.target_count == 100
@@ -42,12 +39,7 @@ class TestPhaseProgress:
 
     def test_from_dict(self):
         """Test PhaseProgress deserialization."""
-        data = {
-            "status": "in_progress",
-            "target_count": 50,
-            "created_count": 25,
-            "created_items": ["a", "b"]
-        }
+        data = {"status": "in_progress", "target_count": 50, "created_count": 25, "created_items": ["a", "b"]}
         progress = PhaseProgress.from_dict(data)
         assert progress.status == "in_progress"
         assert progress.target_count == 50
@@ -69,7 +61,7 @@ class TestCheckpointData:
             last_updated="2024-01-01T00:00:00",
             jira_url="https://test.atlassian.net",
             async_mode=True,
-            concurrency=5
+            concurrency=5,
         )
         assert data.run_id == "TEST-123"
         assert data.prefix == "TEST"
@@ -89,7 +81,7 @@ class TestCheckpointData:
             jira_url="https://test.atlassian.net",
             async_mode=True,
             concurrency=5,
-            phases={"issues": PhaseProgress(status="in_progress", target_count=100)}
+            phases={"issues": PhaseProgress(status="in_progress", target_count=100)},
         )
         result = data.to_dict()
         assert result["run_id"] == "TEST-123"
@@ -163,7 +155,7 @@ class TestCheckpointManager:
             jira_url="https://test.atlassian.net",
             async_mode=True,
             concurrency=5,
-            counts=counts
+            counts=counts,
         )
 
         assert result is not None
@@ -229,7 +221,7 @@ class TestCheckpointManager:
             jira_url="https://test.atlassian.net",
             async_mode=True,
             concurrency=5,
-            counts={}
+            counts={},
         )
 
         # Modify and save
@@ -254,7 +246,7 @@ class TestCheckpointManager:
             jira_url="https://test.atlassian.net",
             async_mode=True,
             concurrency=5,
-            counts={}
+            counts={},
         )
         assert manager.checkpoint is not None
         assert manager.checkpoint.run_id == "TEST-123"
@@ -265,9 +257,13 @@ class TestCheckpointManager:
         """Test start_phase marks phase as in_progress."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={},
         )
 
         manager.start_phase("issues")
@@ -277,9 +273,13 @@ class TestCheckpointManager:
         """Test complete_phase marks phase as complete."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={},
         )
 
         manager.start_phase("issues")
@@ -290,9 +290,13 @@ class TestCheckpointManager:
         """Test is_phase_complete returns correct status."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={},
         )
 
         assert not manager.is_phase_complete("issues")
@@ -308,9 +312,13 @@ class TestCheckpointManager:
         """Test get_phase_progress returns phase."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={"comment": 480}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={"comment": 480},
         )
 
         progress = manager.get_phase_progress("comments")
@@ -321,9 +329,13 @@ class TestCheckpointManager:
         """Test get_phase_progress returns None for unknown phase."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={},
         )
         assert manager.get_phase_progress("unknown") is None
 
@@ -331,9 +343,13 @@ class TestCheckpointManager:
         """Test get_remaining_count calculation."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={"comment": 480}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={"comment": 480},
         )
 
         # Initially all remaining
@@ -349,9 +365,13 @@ class TestCheckpointManager:
         """Test update_phase_count sets count."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={"comment": 480}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={"comment": 480},
         )
 
         manager.update_phase_count("comments", 100)
@@ -361,9 +381,13 @@ class TestCheckpointManager:
         """Test increment_phase_count adds to count."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={"comment": 480}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={"comment": 480},
         )
 
         manager.increment_phase_count("comments", 10)
@@ -375,9 +399,13 @@ class TestCheckpointManager:
         """Test add_phase_items adds items and updates count."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={},
         )
 
         manager.add_phase_items("projects", ["TEST1", "TEST2"])
@@ -390,15 +418,16 @@ class TestCheckpointManager:
         """Test set_projects stores project data."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={},
         )
 
-        projects = [
-            {"key": "TEST1", "id": "10001"},
-            {"key": "TEST2", "id": "10002"}
-        ]
+        projects = [{"key": "TEST1", "id": "10001"}, {"key": "TEST2", "id": "10002"}]
         manager.set_projects(projects)
 
         assert manager._checkpoint.project_keys == ["TEST1", "TEST2"]
@@ -408,9 +437,13 @@ class TestCheckpointManager:
         """Test add_project adds single project."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={},
         )
 
         manager.add_project("TEST1", "10001")
@@ -425,9 +458,13 @@ class TestCheckpointManager:
         """Test set_categories stores category IDs."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={},
         )
 
         manager.set_categories(["10001", "10002"])
@@ -437,9 +474,13 @@ class TestCheckpointManager:
         """Test add_issue_keys stores issue data."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={},
         )
 
         manager.add_issue_keys(["TEST1-1", "TEST1-2"], "TEST1")
@@ -452,9 +493,13 @@ class TestCheckpointManager:
         """Test add_issue_keys stops storing keys after 100k."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=200000,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=200000,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={},
         )
 
         # Add 100k keys
@@ -472,9 +517,13 @@ class TestCheckpointManager:
         """Test get_total_issues_created sums all projects."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={},
         )
 
         manager.add_issue_keys(["TEST1-1", "TEST1-2"], "TEST1")
@@ -502,9 +551,13 @@ class TestCheckpointManager:
         """Test get_issues_needed_per_project with partial progress."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={},
         )
 
         # Add some existing issues
@@ -535,9 +588,13 @@ class TestCheckpointManager:
         """Test get_resume_summary with checkpoint."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={"comment": 480}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={"comment": 480},
         )
 
         manager._checkpoint.project_keys = ["TEST1", "TEST2"]
@@ -561,9 +618,13 @@ class TestCheckpointManager:
         """Test finalize completes phases and renames file."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-20241208-120000", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={}
+            run_id="TEST-20241208-120000",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={},
         )
 
         # Set all counts to match targets
@@ -584,9 +645,13 @@ class TestCheckpointManager:
         """Test delete removes checkpoint file."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={},
         )
 
         checkpoint_path = temp_checkpoint_dir / "TEST-checkpoint.json"
@@ -613,9 +678,13 @@ class TestCheckpointManager:
         """Test save uses atomic write (temp file + rename)."""
         manager = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
         manager.initialize(
-            run_id="TEST-123", size="small", target_issue_count=100,
-            jira_url="https://test.atlassian.net", async_mode=True,
-            concurrency=5, counts={}
+            run_id="TEST-123",
+            size="small",
+            target_issue_count=100,
+            jira_url="https://test.atlassian.net",
+            async_mode=True,
+            concurrency=5,
+            counts={},
         )
 
         # The temp file shouldn't exist after save completes

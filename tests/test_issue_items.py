@@ -33,9 +33,13 @@ def issue_items_gen_with_checkpoint(base_client_kwargs, temp_checkpoint_dir):
     """Create an IssueItemsGenerator with checkpoint."""
     checkpoint = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
     checkpoint.initialize(
-        run_id="TEST-123", size="small", target_issue_count=100,
-        jira_url=JIRA_URL, async_mode=True, concurrency=5,
-        counts={"comment": 480, "issue_worklog": 100}
+        run_id="TEST-123",
+        size="small",
+        target_issue_count=100,
+        jira_url=JIRA_URL,
+        async_mode=True,
+        concurrency=5,
+        counts={"comment": 480, "issue_worklog": 100},
     )
     return IssueItemsGenerator(prefix="TEST", checkpoint=checkpoint, **base_client_kwargs)
 
@@ -62,10 +66,7 @@ class TestIssueItemsGeneratorComments:
         """Test create_comments."""
         for _ in range(3):
             responses.add(
-                responses.POST,
-                f"{JIRA_URL}/rest/api/3/issue/TEST1-1/comment",
-                json={"id": "10001"},
-                status=201
+                responses.POST, f"{JIRA_URL}/rest/api/3/issue/TEST1-1/comment", json={"id": "10001"}, status=201
             )
 
         issue_keys = ["TEST1-1"]
@@ -90,14 +91,8 @@ class TestIssueItemsGeneratorComments:
 
         with aioresponses() as m:
             for _ in range(5):
-                m.post(
-                    f"{JIRA_URL}/rest/api/3/issue/TEST1-1/comment",
-                    payload={"id": "10001"}
-                )
-                m.post(
-                    f"{JIRA_URL}/rest/api/3/issue/TEST1-2/comment",
-                    payload={"id": "10002"}
-                )
+                m.post(f"{JIRA_URL}/rest/api/3/issue/TEST1-1/comment", payload={"id": "10001"})
+                m.post(f"{JIRA_URL}/rest/api/3/issue/TEST1-2/comment", payload={"id": "10002"})
 
             count = await issue_items_gen.create_comments_async(issue_keys, 3)
 
@@ -124,10 +119,7 @@ class TestIssueItemsGeneratorWorklogs:
         """Test create_worklogs."""
         for _ in range(3):
             responses.add(
-                responses.POST,
-                f"{JIRA_URL}/rest/api/3/issue/TEST1-1/worklog",
-                json={"id": "10001"},
-                status=201
+                responses.POST, f"{JIRA_URL}/rest/api/3/issue/TEST1-1/worklog", json={"id": "10001"}, status=201
             )
 
         issue_keys = ["TEST1-1"]
@@ -150,10 +142,7 @@ class TestIssueItemsGeneratorWorklogs:
 
         with aioresponses() as m:
             for _ in range(3):
-                m.post(
-                    f"{JIRA_URL}/rest/api/3/issue/TEST1-1/worklog",
-                    payload={"id": "10001"}
-                )
+                m.post(f"{JIRA_URL}/rest/api/3/issue/TEST1-1/worklog", payload={"id": "10001"})
 
             count = await issue_items_gen.create_worklogs_async(issue_keys, 3)
 
@@ -171,7 +160,7 @@ class TestIssueItemsGeneratorLinks:
             responses.GET,
             f"{JIRA_URL}/rest/api/3/issueLinkType",
             json={"issueLinkTypes": [{"name": "Blocks"}, {"name": "Relates"}]},
-            status=200
+            status=200,
         )
 
         link_types = issue_items_gen.get_link_types()
@@ -193,14 +182,10 @@ class TestIssueItemsGeneratorLinks:
             responses.GET,
             f"{JIRA_URL}/rest/api/3/issueLinkType",
             json={"issueLinkTypes": [{"name": "Blocks"}]},
-            status=200
+            status=200,
         )
         for _ in range(3):
-            responses.add(
-                responses.POST,
-                f"{JIRA_URL}/rest/api/3/issueLink",
-                status=201
-            )
+            responses.add(responses.POST, f"{JIRA_URL}/rest/api/3/issueLink", status=201)
 
         issue_keys = ["TEST1-1", "TEST1-2", "TEST1-3"]
         with patch("time.sleep"):
@@ -227,15 +212,9 @@ class TestIssueItemsGeneratorLinks:
         issue_keys = ["TEST1-1", "TEST1-2", "TEST1-3"]
 
         with aioresponses() as m:
-            m.get(
-                f"{JIRA_URL}/rest/api/3/issueLinkType",
-                payload={"issueLinkTypes": [{"name": "Blocks"}]}
-            )
+            m.get(f"{JIRA_URL}/rest/api/3/issueLinkType", payload={"issueLinkTypes": [{"name": "Blocks"}]})
             for _ in range(3):
-                m.post(
-                    f"{JIRA_URL}/rest/api/3/issueLink",
-                    status=201
-                )
+                m.post(f"{JIRA_URL}/rest/api/3/issueLink", status=201)
 
             count = await issue_items_gen.create_issue_links_async(issue_keys, 3)
 
@@ -250,11 +229,7 @@ class TestIssueItemsGeneratorWatchers:
     def test_add_watchers(self, issue_items_gen):
         """Test add_watchers."""
         for _ in range(3):
-            responses.add(
-                responses.POST,
-                f"{JIRA_URL}/rest/api/3/issue/TEST1-1/watchers",
-                status=204
-            )
+            responses.add(responses.POST, f"{JIRA_URL}/rest/api/3/issue/TEST1-1/watchers", status=204)
 
         issue_keys = ["TEST1-1"]
         user_ids = ["user-1", "user-2", "user-3"]
@@ -285,10 +260,7 @@ class TestIssueItemsGeneratorWatchers:
 
         with aioresponses() as m:
             for _ in range(3):
-                m.post(
-                    f"{JIRA_URL}/rest/api/3/issue/TEST1-1/watchers",
-                    status=204
-                )
+                m.post(f"{JIRA_URL}/rest/api/3/issue/TEST1-1/watchers", status=204)
 
             count = await issue_items_gen.add_watchers_async(issue_keys, 3, user_ids)
 
@@ -310,21 +282,9 @@ class TestIssueItemsGeneratorVotes:
     def test_add_votes(self, issue_items_gen):
         """Test add_votes."""
         for _ in range(3):
-            responses.add(
-                responses.POST,
-                f"{JIRA_URL}/rest/api/3/issue/TEST1-1/votes",
-                status=204
-            )
-            responses.add(
-                responses.POST,
-                f"{JIRA_URL}/rest/api/3/issue/TEST1-2/votes",
-                status=204
-            )
-            responses.add(
-                responses.POST,
-                f"{JIRA_URL}/rest/api/3/issue/TEST1-3/votes",
-                status=204
-            )
+            responses.add(responses.POST, f"{JIRA_URL}/rest/api/3/issue/TEST1-1/votes", status=204)
+            responses.add(responses.POST, f"{JIRA_URL}/rest/api/3/issue/TEST1-2/votes", status=204)
+            responses.add(responses.POST, f"{JIRA_URL}/rest/api/3/issue/TEST1-3/votes", status=204)
 
         issue_keys = ["TEST1-1", "TEST1-2", "TEST1-3"]
         with patch("time.sleep"):
@@ -346,10 +306,7 @@ class TestIssueItemsGeneratorVotes:
 
         with aioresponses() as m:
             for key in issue_keys:
-                m.post(
-                    f"{JIRA_URL}/rest/api/3/issue/{key}/votes",
-                    status=204
-                )
+                m.post(f"{JIRA_URL}/rest/api/3/issue/{key}/votes", status=204)
 
             count = await issue_items_gen.add_votes_async(issue_keys, 3)
 
@@ -365,9 +322,7 @@ class TestIssueItemsGeneratorProperties:
         """Test create_issue_properties."""
         for i in range(3):
             responses.add(
-                responses.PUT,
-                f"{JIRA_URL}/rest/api/3/issue/TEST1-1/properties/test_property_{i+1}",
-                status=201
+                responses.PUT, f"{JIRA_URL}/rest/api/3/issue/TEST1-1/properties/test_property_{i + 1}", status=201
             )
 
         issue_keys = ["TEST1-1"]
@@ -390,10 +345,7 @@ class TestIssueItemsGeneratorProperties:
 
         with aioresponses() as m:
             for i in range(3):
-                m.put(
-                    f"{JIRA_URL}/rest/api/3/issue/TEST1-1/properties/test_property_{i+1}",
-                    status=201
-                )
+                m.put(f"{JIRA_URL}/rest/api/3/issue/TEST1-1/properties/test_property_{i + 1}", status=201)
 
             count = await issue_items_gen.create_issue_properties_async(issue_keys, 3)
 
@@ -409,10 +361,7 @@ class TestIssueItemsGeneratorRemoteLinks:
         """Test create_remote_links."""
         for _ in range(3):
             responses.add(
-                responses.POST,
-                f"{JIRA_URL}/rest/api/3/issue/TEST1-1/remotelink",
-                json={"id": "10001"},
-                status=201
+                responses.POST, f"{JIRA_URL}/rest/api/3/issue/TEST1-1/remotelink", json={"id": "10001"}, status=201
             )
 
         issue_keys = ["TEST1-1"]
@@ -435,10 +384,7 @@ class TestIssueItemsGeneratorRemoteLinks:
 
         with aioresponses() as m:
             for _ in range(3):
-                m.post(
-                    f"{JIRA_URL}/rest/api/3/issue/TEST1-1/remotelink",
-                    payload={"id": "10001"}
-                )
+                m.post(f"{JIRA_URL}/rest/api/3/issue/TEST1-1/remotelink", payload={"id": "10001"})
 
             count = await issue_items_gen.create_remote_links_async(issue_keys, 3)
 
@@ -456,14 +402,9 @@ class TestIssueItemsGeneratorWithCheckpoint:
 
         with aioresponses() as m:
             for _ in range(600):  # More than checkpoint interval (500)
-                m.post(
-                    f"{JIRA_URL}/rest/api/3/issue/TEST1-1/comment",
-                    payload={"id": "10001"}
-                )
+                m.post(f"{JIRA_URL}/rest/api/3/issue/TEST1-1/comment", payload={"id": "10001"})
 
-            await issue_items_gen_with_checkpoint.create_comments_async(
-                issue_keys, 100, start_count=0
-            )
+            await issue_items_gen_with_checkpoint.create_comments_async(issue_keys, 100, start_count=0)
 
         # Checkpoint should have been saved periodically
         assert issue_items_gen_with_checkpoint.checkpoint is not None

@@ -53,14 +53,11 @@ class TestFilterGeneratorFilters:
             responses.POST,
             f"{JIRA_URL}/rest/api/3/filter",
             json={"id": "10001", "name": "TEST Filter 1", "jql": "project = TEST1"},
-            status=201
+            status=201,
         )
 
         filter_obj = filter_gen.create_filter(
-            name="TEST Filter 1",
-            jql="project = TEST1",
-            description="Test description",
-            favourite=True
+            name="TEST Filter 1", jql="project = TEST1", description="Test description", favourite=True
         )
 
         assert filter_obj is not None
@@ -69,10 +66,7 @@ class TestFilterGeneratorFilters:
 
     def test_create_filter_dry_run(self, filter_gen_dry_run):
         """Test create_filter in dry run."""
-        filter_obj = filter_gen_dry_run.create_filter(
-            name="TEST Filter 1",
-            jql="project = TEST1"
-        )
+        filter_obj = filter_gen_dry_run.create_filter(name="TEST Filter 1", jql="project = TEST1")
 
         assert filter_obj is not None
         assert "id" in filter_obj
@@ -85,8 +79,8 @@ class TestFilterGeneratorFilters:
             responses.add(
                 responses.POST,
                 f"{JIRA_URL}/rest/api/3/filter",
-                json={"id": f"1000{i+1}", "name": f"TEST Filter {i+1}"},
-                status=201
+                json={"id": f"1000{i + 1}", "name": f"TEST Filter {i + 1}"},
+                status=201,
             )
 
         project_keys = ["TEST1", "TEST2"]
@@ -108,10 +102,7 @@ class TestFilterGeneratorFilters:
 
         with aioresponses() as m:
             for i in range(3):
-                m.post(
-                    f"{JIRA_URL}/rest/api/3/filter",
-                    payload={"id": f"1000{i+1}", "name": f"TEST Filter {i+1}"}
-                )
+                m.post(f"{JIRA_URL}/rest/api/3/filter", payload={"id": f"1000{i + 1}", "name": f"TEST Filter {i + 1}"})
 
             filters = await filter_gen.create_filters_async(project_keys, 3)
 
@@ -136,13 +127,11 @@ class TestFilterGeneratorDashboards:
             responses.POST,
             f"{JIRA_URL}/rest/api/3/dashboard",
             json={"id": "10001", "name": "TEST Dashboard 1"},
-            status=201
+            status=201,
         )
 
         dashboard = filter_gen.create_dashboard(
-            name="TEST Dashboard 1",
-            description="Test description",
-            share_permissions=[{"type": "authenticated"}]
+            name="TEST Dashboard 1", description="Test description", share_permissions=[{"type": "authenticated"}]
         )
 
         assert dashboard is not None
@@ -151,9 +140,7 @@ class TestFilterGeneratorDashboards:
 
     def test_create_dashboard_dry_run(self, filter_gen_dry_run):
         """Test create_dashboard in dry run."""
-        dashboard = filter_gen_dry_run.create_dashboard(
-            name="TEST Dashboard 1"
-        )
+        dashboard = filter_gen_dry_run.create_dashboard(name="TEST Dashboard 1")
 
         assert dashboard is not None
         assert "id" in dashboard
@@ -165,12 +152,12 @@ class TestFilterGeneratorDashboards:
             responses.POST,
             f"{JIRA_URL}/rest/api/3/dashboard",
             json={"id": "10001", "name": "Private Dashboard"},
-            status=201
+            status=201,
         )
 
         dashboard = filter_gen.create_dashboard(
             name="Private Dashboard",
-            share_permissions=[]  # Empty = private
+            share_permissions=[],  # Empty = private
         )
 
         assert dashboard is not None
@@ -182,8 +169,8 @@ class TestFilterGeneratorDashboards:
             responses.add(
                 responses.POST,
                 f"{JIRA_URL}/rest/api/3/dashboard",
-                json={"id": f"1000{i+1}", "name": f"TEST Dashboard {i+1}"},
-                status=201
+                json={"id": f"1000{i + 1}", "name": f"TEST Dashboard {i + 1}"},
+                status=201,
             )
 
         with patch("time.sleep"):
@@ -203,7 +190,7 @@ class TestFilterGeneratorDashboards:
             for i in range(3):
                 m.post(
                     f"{JIRA_URL}/rest/api/3/dashboard",
-                    payload={"id": f"1000{i+1}", "name": f"TEST Dashboard {i+1}"}
+                    payload={"id": f"1000{i + 1}", "name": f"TEST Dashboard {i + 1}"},
                 )
 
             dashboards = await filter_gen.create_dashboards_async(3)
@@ -228,14 +215,14 @@ class TestFilterGeneratorGadgets:
             responses.POST,
             f"{JIRA_URL}/rest/api/3/dashboard/10001/gadget",
             json={"id": "10001", "moduleKey": "com.atlassian.jira.gadgets:filter-results"},
-            status=200
+            status=200,
         )
 
         gadget = filter_gen.add_gadget_to_dashboard(
             dashboard_id="10001",
             gadget_uri="com.atlassian.jira.gadgets:filter-results",
             position={"column": 0, "row": 0},
-            title="My Gadget"
+            title="My Gadget",
         )
 
         assert gadget is not None
@@ -244,8 +231,7 @@ class TestFilterGeneratorGadgets:
     def test_add_gadget_to_dashboard_dry_run(self, filter_gen_dry_run):
         """Test add_gadget_to_dashboard in dry run."""
         gadget = filter_gen_dry_run.add_gadget_to_dashboard(
-            dashboard_id="10001",
-            gadget_uri="com.atlassian.jira.gadgets:filter-results"
+            dashboard_id="10001", gadget_uri="com.atlassian.jira.gadgets:filter-results"
         )
 
         assert gadget is not None
@@ -293,8 +279,16 @@ class TestFilterGeneratorDashboardTypes:
         names = [d["name"] for d in dashboards]
 
         # Check for various dashboard types in names
-        dashboard_types = ["Overview", "Sprint Progress", "Team Metrics", "Bug Tracker",
-                         "Release Status", "Performance", "Quality", "Velocity"]
+        dashboard_types = [
+            "Overview",
+            "Sprint Progress",
+            "Team Metrics",
+            "Bug Tracker",
+            "Release Status",
+            "Performance",
+            "Quality",
+            "Velocity",
+        ]
 
         found_types = 0
         for dtype in dashboard_types:

@@ -8,7 +8,7 @@ import asyncio
 import random
 import time
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Optional
 
 from .base import JiraAPIClient
 
@@ -25,15 +25,15 @@ class FilterGenerator(JiraAPIClient):
         dry_run: bool = False,
         concurrency: int = 5,
         benchmark=None,
-        request_delay: float = 0.0
+        request_delay: float = 0.0,
     ):
         super().__init__(jira_url, email, api_token, dry_run, concurrency, benchmark, request_delay)
         self.prefix = prefix
         self.run_id = f"{prefix}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
         # Track created items
-        self.created_filters: List[Dict] = []
-        self.created_dashboards: List[Dict] = []
+        self.created_filters: list[dict] = []
+        self.created_dashboards: list[dict] = []
 
     def set_run_id(self, run_id: str):
         """Set the run ID (should match the main generator's run ID)."""
@@ -42,12 +42,8 @@ class FilterGenerator(JiraAPIClient):
     # ========== FILTERS ==========
 
     def create_filter(
-        self,
-        name: str,
-        jql: str,
-        description: Optional[str] = None,
-        favourite: bool = False
-    ) -> Optional[Dict]:
+        self, name: str, jql: str, description: Optional[str] = None, favourite: bool = False
+    ) -> Optional[dict]:
         """Create a saved filter.
 
         Args:
@@ -59,32 +55,24 @@ class FilterGenerator(JiraAPIClient):
         Returns:
             Filter dict with 'id', 'name', 'jql' or None on failure
         """
-        filter_data = {
-            "name": name,
-            "jql": jql,
-            "favourite": favourite
-        }
+        filter_data = {"name": name, "jql": jql, "favourite": favourite}
 
         if description:
             filter_data["description"] = description
 
         if self.dry_run:
-            filter_obj = {
-                "id": str(random.randint(10000, 99999)),
-                "name": name,
-                "jql": jql
-            }
+            filter_obj = {"id": str(random.randint(10000, 99999)), "name": name, "jql": jql}
             self.created_filters.append(filter_obj)
             return filter_obj
 
-        response = self._api_call('POST', 'filter', data=filter_data)
+        response = self._api_call("POST", "filter", data=filter_data)
         if response:
             filter_obj = response.json()
             self.created_filters.append(filter_obj)
             return filter_obj
         return None
 
-    def create_filters(self, project_keys: List[str], count: int) -> List[Dict]:
+    def create_filters(self, project_keys: list[str], count: int) -> list[dict]:
         """Create multiple filters with varying JQL queries.
 
         Args:
@@ -121,20 +109,14 @@ class FilterGenerator(JiraAPIClient):
 
             # Fill in template
             jql = template.format(
-                project=project,
-                projects=', '.join(project_keys),
-                prefix=self.prefix,
-                run_id=self.run_id
+                project=project, projects=", ".join(project_keys), prefix=self.prefix, run_id=self.run_id
             )
 
             name = f"{self.prefix} Filter {i + 1}"
             description = f"Test filter - {self.generate_random_text(5, 10)}"
 
             filter_obj = self.create_filter(
-                name=name,
-                jql=jql,
-                description=description,
-                favourite=random.choice([True, False])
+                name=name, jql=jql, description=description, favourite=random.choice([True, False])
             )
 
             if filter_obj:
@@ -148,11 +130,8 @@ class FilterGenerator(JiraAPIClient):
     # ========== DASHBOARDS ==========
 
     def create_dashboard(
-        self,
-        name: str,
-        description: Optional[str] = None,
-        share_permissions: Optional[List[Dict]] = None
-    ) -> Optional[Dict]:
+        self, name: str, description: Optional[str] = None, share_permissions: Optional[list[dict]] = None
+    ) -> Optional[dict]:
         """Create a dashboard.
 
         Args:
@@ -163,9 +142,7 @@ class FilterGenerator(JiraAPIClient):
         Returns:
             Dashboard dict with 'id', 'name' or None on failure
         """
-        dashboard_data = {
-            "name": name
-        }
+        dashboard_data = {"name": name}
 
         if description:
             dashboard_data["description"] = description
@@ -177,21 +154,18 @@ class FilterGenerator(JiraAPIClient):
             dashboard_data["sharePermissions"] = []
 
         if self.dry_run:
-            dashboard = {
-                "id": str(random.randint(10000, 99999)),
-                "name": name
-            }
+            dashboard = {"id": str(random.randint(10000, 99999)), "name": name}
             self.created_dashboards.append(dashboard)
             return dashboard
 
-        response = self._api_call('POST', 'dashboard', data=dashboard_data)
+        response = self._api_call("POST", "dashboard", data=dashboard_data)
         if response:
             dashboard = response.json()
             self.created_dashboards.append(dashboard)
             return dashboard
         return None
 
-    def create_dashboards(self, count: int) -> List[Dict]:
+    def create_dashboards(self, count: int) -> list[dict]:
         """Create multiple dashboards.
 
         Args:
@@ -212,7 +186,7 @@ class FilterGenerator(JiraAPIClient):
             "Release Status",
             "Performance",
             "Quality",
-            "Velocity"
+            "Velocity",
         ]
 
         for i in range(count):
@@ -226,11 +200,7 @@ class FilterGenerator(JiraAPIClient):
             else:
                 share_permissions = [{"type": "authenticated"}]
 
-            dashboard = self.create_dashboard(
-                name=name,
-                description=description,
-                share_permissions=share_permissions
-            )
+            dashboard = self.create_dashboard(name=name, description=description, share_permissions=share_permissions)
 
             if dashboard:
                 dashboards.append(dashboard)
@@ -241,12 +211,8 @@ class FilterGenerator(JiraAPIClient):
         return dashboards
 
     def add_gadget_to_dashboard(
-        self,
-        dashboard_id: str,
-        gadget_uri: str,
-        position: Optional[Dict] = None,
-        title: Optional[str] = None
-    ) -> Optional[Dict]:
+        self, dashboard_id: str, gadget_uri: str, position: Optional[dict] = None, title: Optional[str] = None
+    ) -> Optional[dict]:
         """Add a gadget to a dashboard.
 
         Note: This requires knowing the gadget URIs available in the instance.
@@ -260,9 +226,7 @@ class FilterGenerator(JiraAPIClient):
         Returns:
             Gadget dict or None on failure
         """
-        gadget_data = {
-            "moduleKey": gadget_uri
-        }
+        gadget_data = {"moduleKey": gadget_uri}
 
         if position:
             gadget_data["position"] = position
@@ -272,14 +236,14 @@ class FilterGenerator(JiraAPIClient):
         if self.dry_run:
             return {"id": str(random.randint(10000, 99999)), "moduleKey": gadget_uri}
 
-        response = self._api_call('POST', f'dashboard/{dashboard_id}/gadget', data=gadget_data)
+        response = self._api_call("POST", f"dashboard/{dashboard_id}/gadget", data=gadget_data)
         if response:
             return response.json()
         return None
 
     # ========== ASYNC METHODS ==========
 
-    async def create_filters_async(self, project_keys: List[str], count: int) -> List[Dict]:
+    async def create_filters_async(self, project_keys: list[str], count: int) -> list[dict]:
         """Create multiple filters with varying JQL queries concurrently.
 
         Args:
@@ -314,24 +278,21 @@ class FilterGenerator(JiraAPIClient):
             template = jql_templates[i % len(jql_templates)]
 
             jql = template.format(
-                project=project,
-                projects=', '.join(project_keys),
-                prefix=self.prefix,
-                run_id=self.run_id
+                project=project, projects=", ".join(project_keys), prefix=self.prefix, run_id=self.run_id
             )
 
             filter_data = {
                 "name": f"{self.prefix} Filter {i + 1}",
                 "jql": jql,
                 "description": f"Test filter - {self.generate_random_text(5, 10)}",
-                "favourite": random.choice([True, False])
+                "favourite": random.choice([True, False]),
             }
-            tasks.append(self._api_call_async('POST', 'filter', data=filter_data))
+            tasks.append(self._api_call_async("POST", "filter", data=filter_data))
 
         # Execute with progress tracking
         filters = []
         for i in range(0, len(tasks), self.concurrency * 2):
-            batch = tasks[i:i + self.concurrency * 2]
+            batch = tasks[i : i + self.concurrency * 2]
             results = await asyncio.gather(*batch, return_exceptions=True)
             for result in results:
                 if isinstance(result, tuple) and result[0] and result[1]:
@@ -342,7 +303,7 @@ class FilterGenerator(JiraAPIClient):
                     filter_obj = {
                         "id": str(random.randint(10000, 99999)),
                         "name": f"{self.prefix} Filter {len(filters) + 1}",
-                        "jql": "project = TEST"
+                        "jql": "project = TEST",
                     }
                     filters.append(filter_obj)
                     self.created_filters.append(filter_obj)
@@ -350,7 +311,7 @@ class FilterGenerator(JiraAPIClient):
 
         return filters
 
-    async def create_dashboards_async(self, count: int) -> List[Dict]:
+    async def create_dashboards_async(self, count: int) -> list[dict]:
         """Create multiple dashboards concurrently.
 
         Args:
@@ -369,7 +330,7 @@ class FilterGenerator(JiraAPIClient):
             "Release Status",
             "Performance",
             "Quality",
-            "Velocity"
+            "Velocity",
         ]
 
         # Pre-generate all dashboard data
@@ -385,17 +346,13 @@ class FilterGenerator(JiraAPIClient):
             else:
                 share_permissions = [{"type": "authenticated"}]
 
-            dashboard_data = {
-                "name": name,
-                "description": description,
-                "sharePermissions": share_permissions
-            }
-            tasks.append(self._api_call_async('POST', 'dashboard', data=dashboard_data))
+            dashboard_data = {"name": name, "description": description, "sharePermissions": share_permissions}
+            tasks.append(self._api_call_async("POST", "dashboard", data=dashboard_data))
 
         # Execute with progress tracking
         dashboards = []
         for i in range(0, len(tasks), self.concurrency * 2):
-            batch = tasks[i:i + self.concurrency * 2]
+            batch = tasks[i : i + self.concurrency * 2]
             results = await asyncio.gather(*batch, return_exceptions=True)
             for result in results:
                 if isinstance(result, tuple) and result[0] and result[1]:
@@ -405,7 +362,7 @@ class FilterGenerator(JiraAPIClient):
                 elif self.dry_run:
                     dashboard = {
                         "id": str(random.randint(10000, 99999)),
-                        "name": f"{self.prefix} Dashboard {len(dashboards) + 1}"
+                        "name": f"{self.prefix} Dashboard {len(dashboards) + 1}",
                     }
                     dashboards.append(dashboard)
                     self.created_dashboards.append(dashboard)

@@ -33,8 +33,13 @@ def issue_gen_with_checkpoint(base_client_kwargs, temp_checkpoint_dir):
     """Create an IssueGenerator with checkpoint."""
     checkpoint = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
     checkpoint.initialize(
-        run_id="TEST-123", size="small", target_issue_count=100,
-        jira_url=JIRA_URL, async_mode=True, concurrency=5, counts={}
+        run_id="TEST-123",
+        size="small",
+        target_issue_count=100,
+        jira_url=JIRA_URL,
+        async_mode=True,
+        concurrency=5,
+        counts={},
     )
     return IssueGenerator(prefix="TEST", checkpoint=checkpoint, **base_client_kwargs)
 
@@ -74,10 +79,7 @@ class TestIssueGeneratorProjectId:
         issue_gen.project_key = "TEST1"
 
         responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/project/TEST1",
-            json={"key": "TEST1", "id": "10001"},
-            status=200
+            responses.GET, f"{JIRA_URL}/rest/api/3/project/TEST1", json={"key": "TEST1", "id": "10001"}, status=200
         )
 
         project_id = issue_gen.get_project_id()
@@ -110,7 +112,7 @@ class TestIssueGeneratorBulkCreate:
             responses.POST,
             f"{JIRA_URL}/rest/api/3/issue/bulk",
             json={"issues": [{"key": f"TEST1-{i}"} for i in range(1, 11)]},
-            status=201
+            status=201,
         )
 
         with patch("time.sleep"):
@@ -138,14 +140,14 @@ class TestIssueGeneratorBulkCreate:
             responses.POST,
             f"{JIRA_URL}/rest/api/3/issue/bulk",
             json={"issues": [{"key": f"TEST1-{i}"} for i in range(1, 51)]},
-            status=201
+            status=201,
         )
         # Second batch (25 issues)
         responses.add(
             responses.POST,
             f"{JIRA_URL}/rest/api/3/issue/bulk",
             json={"issues": [{"key": f"TEST1-{i}"} for i in range(51, 76)]},
-            status=201
+            status=201,
         )
 
         with patch("time.sleep"):
@@ -163,14 +165,10 @@ class TestIssueGeneratorBulkCreate:
             responses.POST,
             f"{JIRA_URL}/rest/api/3/issue/bulk",
             json={"issues": [{"key": f"TEST1-{i}"} for i in range(1, 51)]},
-            status=201
+            status=201,
         )
         # Second batch fails
-        responses.add(
-            responses.POST,
-            f"{JIRA_URL}/rest/api/3/issue/bulk",
-            status=500
-        )
+        responses.add(responses.POST, f"{JIRA_URL}/rest/api/3/issue/bulk", status=500)
 
         with patch("time.sleep"):
             issue_keys = issue_gen.create_issues_bulk(75)
@@ -193,8 +191,7 @@ class TestIssueGeneratorBulkAsync:
         """Test create_issues_bulk_async."""
         with aioresponses() as m:
             m.post(
-                f"{JIRA_URL}/rest/api/3/issue/bulk",
-                payload={"issues": [{"key": f"TEST1-{i}"} for i in range(1, 11)]}
+                f"{JIRA_URL}/rest/api/3/issue/bulk", payload={"issues": [{"key": f"TEST1-{i}"} for i in range(1, 11)]}
             )
 
             issue_keys = await issue_gen.create_issues_bulk_async(10, "TEST1", "10001")
@@ -227,7 +224,7 @@ class TestIssueGeneratorAttachments:
             responses.POST,
             f"{JIRA_URL}/rest/api/3/issue/TEST1-1/attachments",
             json=[{"id": "10001", "filename": "test.txt"}],
-            status=200
+            status=200,
         )
 
         result = issue_gen.add_attachment("TEST1-1", b"test content", "test.txt")
@@ -246,13 +243,10 @@ class TestIssueGeneratorAttachments:
             responses.POST,
             f"{JIRA_URL}/rest/api/3/issue/TEST1-1/attachments",
             status=429,
-            headers={"Retry-After": "0.01"}
+            headers={"Retry-After": "0.01"},
         )
         responses.add(
-            responses.POST,
-            f"{JIRA_URL}/rest/api/3/issue/TEST1-1/attachments",
-            json=[{"id": "10001"}],
-            status=200
+            responses.POST, f"{JIRA_URL}/rest/api/3/issue/TEST1-1/attachments", json=[{"id": "10001"}], status=200
         )
 
         with patch("time.sleep"):
@@ -265,11 +259,7 @@ class TestIssueGeneratorAttachments:
         """Test add_attachment handles failure."""
         # All retries fail
         for _ in range(5):
-            responses.add(
-                responses.POST,
-                f"{JIRA_URL}/rest/api/3/issue/TEST1-1/attachments",
-                status=500
-            )
+            responses.add(responses.POST, f"{JIRA_URL}/rest/api/3/issue/TEST1-1/attachments", status=500)
 
         with patch("time.sleep"):
             result = issue_gen.add_attachment("TEST1-1", b"test content", "test.txt")
@@ -283,7 +273,7 @@ class TestIssueGeneratorAttachments:
             responses.POST,
             f"{JIRA_URL}/rest/api/3/issue/TEST1-1/attachments",
             json={"errorMessages": ["Attachment already exists"]},
-            status=400
+            status=400,
         )
 
         with patch("time.sleep"):
@@ -299,20 +289,20 @@ class TestIssueGeneratorAttachments:
             responses.add(
                 responses.POST,
                 f"{JIRA_URL}/rest/api/3/issue/TEST1-1/attachments",
-                json=[{"id": f"1000{i+1}"}],
-                status=200
+                json=[{"id": f"1000{i + 1}"}],
+                status=200,
             )
             responses.add(
                 responses.POST,
                 f"{JIRA_URL}/rest/api/3/issue/TEST1-2/attachments",
-                json=[{"id": f"2000{i+1}"}],
-                status=200
+                json=[{"id": f"2000{i + 1}"}],
+                status=200,
             )
             responses.add(
                 responses.POST,
                 f"{JIRA_URL}/rest/api/3/issue/TEST1-3/attachments",
-                json=[{"id": f"3000{i+1}"}],
-                status=200
+                json=[{"id": f"3000{i + 1}"}],
+                status=200,
             )
 
         issue_keys = ["TEST1-1", "TEST1-2", "TEST1-3"]
@@ -335,10 +325,7 @@ class TestIssueGeneratorAttachmentsAsync:
     async def test_add_attachment_async(self, issue_gen):
         """Test add_attachment_async."""
         with aioresponses() as m:
-            m.post(
-                f"{JIRA_URL}/rest/api/3/issue/TEST1-1/attachments",
-                payload=[{"id": "10001"}]
-            )
+            m.post(f"{JIRA_URL}/rest/api/3/issue/TEST1-1/attachments", payload=[{"id": "10001"}])
 
             result = await issue_gen.add_attachment_async("TEST1-1", b"test content", "test.txt")
 
@@ -359,14 +346,8 @@ class TestIssueGeneratorAttachmentsAsync:
 
         with aioresponses() as m:
             for _ in range(3):
-                m.post(
-                    f"{JIRA_URL}/rest/api/3/issue/TEST1-1/attachments",
-                    payload=[{"id": "10001"}]
-                )
-                m.post(
-                    f"{JIRA_URL}/rest/api/3/issue/TEST1-2/attachments",
-                    payload=[{"id": "10002"}]
-                )
+                m.post(f"{JIRA_URL}/rest/api/3/issue/TEST1-1/attachments", payload=[{"id": "10001"}])
+                m.post(f"{JIRA_URL}/rest/api/3/issue/TEST1-2/attachments", payload=[{"id": "10002"}])
 
             count = await issue_gen.create_attachments_async(issue_keys, 3)
 
@@ -456,7 +437,7 @@ class TestIssueGeneratorFileGeneration:
         generated_extensions = set()
         for _ in range(20):
             content, filename = issue_gen.generate_random_file(1, 5)
-            ext = filename.rsplit('.', 1)[-1]
+            ext = filename.rsplit(".", 1)[-1]
             generated_extensions.add(ext)
             assert isinstance(content, bytes)
 
@@ -468,7 +449,7 @@ class TestIssueGeneratorFileGeneration:
         generated_extensions = set()
         for i in range(20):
             content, filename = issue_gen._generate_small_file(i)
-            ext = filename.rsplit('.', 1)[-1]
+            ext = filename.rsplit(".", 1)[-1]
             generated_extensions.add(ext)
 
         assert len(generated_extensions) >= 2
@@ -486,7 +467,7 @@ class TestIssueGeneratorWithCheckpoint:
             responses.POST,
             f"{JIRA_URL}/rest/api/3/issue/bulk",
             json={"issues": [{"key": f"TEST1-{i}"} for i in range(1, 51)]},
-            status=201
+            status=201,
         )
 
         with patch("time.sleep"):

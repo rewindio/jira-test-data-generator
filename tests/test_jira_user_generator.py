@@ -19,11 +19,7 @@ TEST_TOKEN = "test-api-token"
 def user_gen():
     """Create a JiraUserGenerator instance."""
     return JiraUserGenerator(
-        jira_url=JIRA_URL,
-        email=TEST_EMAIL,
-        api_token=TEST_TOKEN,
-        products=["jira-software"],
-        dry_run=False
+        jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, products=["jira-software"], dry_run=False
     )
 
 
@@ -31,11 +27,7 @@ def user_gen():
 def user_gen_dry_run():
     """Create a dry-run JiraUserGenerator instance."""
     return JiraUserGenerator(
-        jira_url=JIRA_URL,
-        email=TEST_EMAIL,
-        api_token=TEST_TOKEN,
-        products=["jira-software"],
-        dry_run=True
+        jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, products=["jira-software"], dry_run=True
     )
 
 
@@ -55,29 +47,18 @@ class TestJiraUserGeneratorInit:
 
     def test_init_url_normalization(self):
         """Test URL trailing slash is removed."""
-        gen = JiraUserGenerator(
-            jira_url=f"{JIRA_URL}/",
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN
-        )
+        gen = JiraUserGenerator(jira_url=f"{JIRA_URL}/", email=TEST_EMAIL, api_token=TEST_TOKEN)
         assert gen.jira_url == JIRA_URL
 
     def test_init_default_products(self):
         """Test default products are jira-software."""
-        gen = JiraUserGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN
-        )
+        gen = JiraUserGenerator(jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN)
         assert gen.products == ["jira-software"]
 
     def test_init_multiple_products(self):
         """Test initialization with multiple products."""
         gen = JiraUserGenerator(
-            jira_url=JIRA_URL,
-            email=TEST_EMAIL,
-            api_token=TEST_TOKEN,
-            products=["jira-software", "jira-servicedesk"]
+            jira_url=JIRA_URL, email=TEST_EMAIL, api_token=TEST_TOKEN, products=["jira-software", "jira-servicedesk"]
         )
         assert len(gen.products) == 2
 
@@ -122,11 +103,7 @@ class TestJiraUserGeneratorEmailParsing:
     def test_generate_sandbox_email_sequence(self, user_gen):
         """Test generate_sandbox_email for multiple users."""
         emails = [user_gen.generate_sandbox_email("user@example.com", i) for i in range(1, 4)]
-        assert emails == [
-            "user+sandbox1@example.com",
-            "user+sandbox2@example.com",
-            "user+sandbox3@example.com"
-        ]
+        assert emails == ["user+sandbox1@example.com", "user+sandbox2@example.com", "user+sandbox3@example.com"]
 
 
 class TestJiraUserGeneratorUserOperations:
@@ -139,7 +116,7 @@ class TestJiraUserGeneratorUserOperations:
             responses.GET,
             f"{JIRA_URL}/rest/api/3/user/search",
             json=[{"accountId": "user-123", "emailAddress": "test@example.com"}],
-            status=200
+            status=200,
         )
 
         user = user_gen.check_user_exists("test@example.com")
@@ -150,12 +127,7 @@ class TestJiraUserGeneratorUserOperations:
     @responses.activate
     def test_check_user_exists_not_found(self, user_gen):
         """Test check_user_exists when user doesn't exist."""
-        responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/user/search",
-            json=[],
-            status=200
-        )
+        responses.add(responses.GET, f"{JIRA_URL}/rest/api/3/user/search", json=[], status=200)
 
         user = user_gen.check_user_exists("nonexistent@example.com")
 
@@ -170,18 +142,13 @@ class TestJiraUserGeneratorUserOperations:
     def test_create_user_new(self, user_gen):
         """Test create_user for new user."""
         # Check user doesn't exist
-        responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/user/search",
-            json=[],
-            status=200
-        )
+        responses.add(responses.GET, f"{JIRA_URL}/rest/api/3/user/search", json=[], status=200)
         # Create user
         responses.add(
             responses.POST,
             f"{JIRA_URL}/rest/api/3/user",
             json={"accountId": "user-123", "emailAddress": "test@example.com"},
-            status=201
+            status=201,
         )
 
         user = user_gen.create_user("test@example.com", "Test User")
@@ -198,7 +165,7 @@ class TestJiraUserGeneratorUserOperations:
             responses.GET,
             f"{JIRA_URL}/rest/api/3/user/search",
             json=[{"accountId": "user-123", "emailAddress": "test@example.com"}],
-            status=200
+            status=200,
         )
 
         user = user_gen.create_user("test@example.com", "Test User")
@@ -220,19 +187,9 @@ class TestJiraUserGeneratorUserOperations:
         """Test generate_users creates multiple users."""
         for i in range(1, 4):
             # Check if exists
-            responses.add(
-                responses.GET,
-                f"{JIRA_URL}/rest/api/3/user/search",
-                json=[],
-                status=200
-            )
+            responses.add(responses.GET, f"{JIRA_URL}/rest/api/3/user/search", json=[], status=200)
             # Create
-            responses.add(
-                responses.POST,
-                f"{JIRA_URL}/rest/api/3/user",
-                json={"accountId": f"user-{i}"},
-                status=201
-            )
+            responses.add(responses.POST, f"{JIRA_URL}/rest/api/3/user", json={"accountId": f"user-{i}"}, status=201)
 
         with patch("time.sleep"):
             users = user_gen.generate_users("base@example.com", 3)
@@ -257,7 +214,7 @@ class TestJiraUserGeneratorGroupOperations:
             responses.GET,
             f"{JIRA_URL}/rest/api/3/group/bulk",
             json={"values": [{"name": "Test Group", "groupId": "group-123"}]},
-            status=200
+            status=200,
         )
 
         group = user_gen.check_group_exists("Test Group")
@@ -268,12 +225,7 @@ class TestJiraUserGeneratorGroupOperations:
     @responses.activate
     def test_check_group_exists_not_found(self, user_gen):
         """Test check_group_exists when group doesn't exist."""
-        responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/group/bulk",
-            json={"values": []},
-            status=200
-        )
+        responses.add(responses.GET, f"{JIRA_URL}/rest/api/3/group/bulk", json={"values": []}, status=200)
 
         group = user_gen.check_group_exists("Nonexistent Group")
 
@@ -288,18 +240,13 @@ class TestJiraUserGeneratorGroupOperations:
     def test_create_group_new(self, user_gen):
         """Test create_group for new group."""
         # Check group doesn't exist
-        responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/group/bulk",
-            json={"values": []},
-            status=200
-        )
+        responses.add(responses.GET, f"{JIRA_URL}/rest/api/3/group/bulk", json={"values": []}, status=200)
         # Create group
         responses.add(
             responses.POST,
             f"{JIRA_URL}/rest/api/3/group",
             json={"name": "Test Group", "groupId": "group-123"},
-            status=201
+            status=201,
         )
 
         group = user_gen.create_group("Test Group")
@@ -315,7 +262,7 @@ class TestJiraUserGeneratorGroupOperations:
             responses.GET,
             f"{JIRA_URL}/rest/api/3/group/bulk",
             json={"values": [{"name": "Test Group", "groupId": "group-123"}]},
-            status=200
+            status=200,
         )
 
         group = user_gen.create_group("Test Group")
@@ -337,18 +284,13 @@ class TestJiraUserGeneratorGroupOperations:
         """Test generate_groups creates multiple groups."""
         for i in range(3):
             # Check if exists
-            responses.add(
-                responses.GET,
-                f"{JIRA_URL}/rest/api/3/group/bulk",
-                json={"values": []},
-                status=200
-            )
+            responses.add(responses.GET, f"{JIRA_URL}/rest/api/3/group/bulk", json={"values": []}, status=200)
             # Create
             responses.add(
                 responses.POST,
                 f"{JIRA_URL}/rest/api/3/group",
-                json={"name": f"Group {i+1}", "groupId": f"group-{i+1}"},
-                status=201
+                json={"name": f"Group {i + 1}", "groupId": f"group-{i + 1}"},
+                status=201,
             )
 
         with patch("time.sleep"):
@@ -363,11 +305,7 @@ class TestJiraUserGeneratorGroupMembership:
     @responses.activate
     def test_add_user_to_group(self, user_gen):
         """Test add_user_to_group."""
-        responses.add(
-            responses.POST,
-            f"{JIRA_URL}/rest/api/3/group/user",
-            status=201
-        )
+        responses.add(responses.POST, f"{JIRA_URL}/rest/api/3/group/user", status=201)
 
         result = user_gen.add_user_to_group("user-123", "Test Group")
 
@@ -386,10 +324,7 @@ class TestJiraUserGeneratorGenerateAll:
         """Test generate_all in dry run mode."""
         with patch("time.sleep"):
             user_gen_dry_run.generate_all(
-                base_email="user@example.com",
-                user_count=3,
-                group_names=["Group 1", "Group 2"],
-                user_prefix="Test"
+                base_email="user@example.com", user_count=3, group_names=["Group 1", "Group 2"], user_prefix="Test"
             )
 
         assert len(user_gen_dry_run.created_users) == 3
@@ -398,11 +333,7 @@ class TestJiraUserGeneratorGenerateAll:
     def test_generate_all_no_groups(self, user_gen_dry_run):
         """Test generate_all without groups."""
         with patch("time.sleep"):
-            user_gen_dry_run.generate_all(
-                base_email="user@example.com",
-                user_count=2,
-                user_prefix="Test"
-            )
+            user_gen_dry_run.generate_all(base_email="user@example.com", user_count=2, user_prefix="Test")
 
         assert len(user_gen_dry_run.created_users) == 2
         assert len(user_gen_dry_run.created_groups) == 0
@@ -410,13 +341,11 @@ class TestJiraUserGeneratorGenerateAll:
     def test_generate_all_logs_summary(self, user_gen_dry_run, caplog):
         """Test generate_all logs summary."""
         import logging
+
         caplog.set_level(logging.INFO)
 
         with patch("time.sleep"):
-            user_gen_dry_run.generate_all(
-                base_email="user@example.com",
-                user_count=2
-            )
+            user_gen_dry_run.generate_all(base_email="user@example.com", user_count=2)
 
         assert "Generation complete" in caplog.text
 
@@ -428,18 +357,9 @@ class TestJiraUserGeneratorAPICall:
     def test_api_call_rate_limit(self, user_gen):
         """Test API call handles rate limiting."""
         responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/test",
-            json={},
-            status=429,
-            headers={"Retry-After": "0.01"}
+            responses.GET, f"{JIRA_URL}/rest/api/3/test", json={}, status=429, headers={"Retry-After": "0.01"}
         )
-        responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/test",
-            json={"success": True},
-            status=200
-        )
+        responses.add(responses.GET, f"{JIRA_URL}/rest/api/3/test", json={"success": True}, status=200)
 
         with patch("time.sleep"):
             response = user_gen._api_call("GET", "test")
@@ -461,12 +381,7 @@ class TestJiraUserGeneratorAPICall:
     @responses.activate
     def test_api_call_error_with_response(self, user_gen):
         """Test API call error handling with response body."""
-        responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/test",
-            json={"errorMessages": ["Test error"]},
-            status=400
-        )
+        responses.add(responses.GET, f"{JIRA_URL}/rest/api/3/test", json={"errorMessages": ["Test error"]}, status=400)
 
         with patch("time.sleep"):
             with pytest.raises(requests.exceptions.HTTPError):
@@ -480,19 +395,11 @@ class TestJiraUserGeneratorFailurePaths:
     def test_create_user_api_fails_catches_exception(self, user_gen):
         """Test create_user handles API failure gracefully."""
         # Check if exists returns nothing
-        responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/user/search",
-            json=[],
-            status=200
-        )
+        responses.add(responses.GET, f"{JIRA_URL}/rest/api/3/user/search", json=[], status=200)
         # Create returns 400 - need to add multiple for all retry attempts
         for _ in range(5):
             responses.add(
-                responses.POST,
-                f"{JIRA_URL}/rest/api/3/user",
-                json={"errorMessages": ["Invalid request"]},
-                status=400
+                responses.POST, f"{JIRA_URL}/rest/api/3/user", json={"errorMessages": ["Invalid request"]}, status=400
             )
 
         with patch("time.sleep"):
@@ -508,19 +415,11 @@ class TestJiraUserGeneratorFailurePaths:
     def test_create_group_api_fails_catches_exception(self, user_gen):
         """Test create_group handles API failure gracefully."""
         # Check if exists returns nothing
-        responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/group/bulk",
-            json={"values": []},
-            status=200
-        )
+        responses.add(responses.GET, f"{JIRA_URL}/rest/api/3/group/bulk", json={"values": []}, status=200)
         # Create returns 400 - need to add multiple for all retry attempts
         for _ in range(5):
             responses.add(
-                responses.POST,
-                f"{JIRA_URL}/rest/api/3/group",
-                json={"errorMessages": ["Invalid request"]},
-                status=400
+                responses.POST, f"{JIRA_URL}/rest/api/3/group", json={"errorMessages": ["Invalid request"]}, status=400
             )
 
         with patch("time.sleep"):

@@ -33,8 +33,13 @@ def project_gen_with_checkpoint(base_client_kwargs, temp_checkpoint_dir):
     """Create a ProjectGenerator with checkpoint."""
     checkpoint = CheckpointManager("TEST", checkpoint_dir=temp_checkpoint_dir)
     checkpoint.initialize(
-        run_id="TEST-123", size="small", target_issue_count=100,
-        jira_url=JIRA_URL, async_mode=True, concurrency=5, counts={}
+        run_id="TEST-123",
+        size="small",
+        target_issue_count=100,
+        jira_url=JIRA_URL,
+        async_mode=True,
+        concurrency=5,
+        counts={},
     )
     return ProjectGenerator(prefix="TEST", checkpoint=checkpoint, **base_client_kwargs)
 
@@ -72,7 +77,7 @@ class TestProjectGeneratorCategories:
             responses.POST,
             f"{JIRA_URL}/rest/api/3/projectCategory",
             json={"id": "10001", "name": "TEST Development 1"},
-            status=201
+            status=201,
         )
 
         category = project_gen.create_category("TEST Development 1")
@@ -98,8 +103,8 @@ class TestProjectGeneratorCategories:
             responses.add(
                 responses.POST,
                 f"{JIRA_URL}/rest/api/3/projectCategory",
-                json={"id": f"1000{i+1}", "name": f"TEST Category {i+1}"},
-                status=201
+                json={"id": f"1000{i + 1}", "name": f"TEST Category {i + 1}"},
+                status=201,
             )
 
         with patch("time.sleep"):
@@ -115,32 +120,23 @@ class TestProjectGeneratorProjects:
     def test_create_projects(self, project_gen):
         """Test create_projects creates multiple projects."""
         # Mock current user
-        responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/myself",
-            json={"accountId": "user-123"},
-            status=200
-        )
+        responses.add(responses.GET, f"{JIRA_URL}/rest/api/3/myself", json={"accountId": "user-123"}, status=200)
         for i in range(3):
             responses.add(
                 responses.POST,
                 f"{JIRA_URL}/rest/api/3/project",
-                json={"key": f"TEST{i+1}", "id": f"1000{i+1}"},
-                status=201
+                json={"key": f"TEST{i + 1}", "id": f"1000{i + 1}"},
+                status=201,
             )
             # Mock get admin role
             responses.add(
                 responses.GET,
-                f"{JIRA_URL}/rest/api/3/project/TEST{i+1}/role",
-                json={"Administrators": f"{JIRA_URL}/rest/api/3/project/TEST{i+1}/role/10002"},
-                status=200
+                f"{JIRA_URL}/rest/api/3/project/TEST{i + 1}/role",
+                json={"Administrators": f"{JIRA_URL}/rest/api/3/project/TEST{i + 1}/role/10002"},
+                status=200,
             )
             # Mock add user to role
-            responses.add(
-                responses.POST,
-                f"{JIRA_URL}/rest/api/3/project/TEST{i+1}/role/10002",
-                status=200
-            )
+            responses.add(responses.POST, f"{JIRA_URL}/rest/api/3/project/TEST{i + 1}/role/10002", status=200)
 
         with patch("time.sleep"):
             projects = project_gen.create_projects(3)
@@ -161,25 +157,17 @@ class TestProjectGeneratorProjects:
     def test_create_projects_already_exists(self, project_gen):
         """Test create_projects when project already exists."""
         # Mock current user
-        responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/myself",
-            json={"accountId": "user-123"},
-            status=200
-        )
+        responses.add(responses.GET, f"{JIRA_URL}/rest/api/3/myself", json={"accountId": "user-123"}, status=200)
         # Create fails
         responses.add(
             responses.POST,
             f"{JIRA_URL}/rest/api/3/project",
             json={"errorMessages": ["A project with that key already exists."]},
-            status=400
+            status=400,
         )
         # Get existing project
         responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/project/TEST1",
-            json={"key": "TEST1", "id": "10001"},
-            status=200
+            responses.GET, f"{JIRA_URL}/rest/api/3/project/TEST1", json={"key": "TEST1", "id": "10001"}, status=200
         )
 
         with patch("time.sleep"):
@@ -192,10 +180,7 @@ class TestProjectGeneratorProjects:
     def test_get_project(self, project_gen):
         """Test get_project."""
         responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/project/TEST1",
-            json={"key": "TEST1", "id": "10001"},
-            status=200
+            responses.GET, f"{JIRA_URL}/rest/api/3/project/TEST1", json={"key": "TEST1", "id": "10001"}, status=200
         )
 
         project = project_gen.get_project("TEST1")
@@ -215,7 +200,7 @@ class TestProjectGeneratorAssignToCategory:
             responses.PUT,
             f"{JIRA_URL}/rest/api/3/project/TEST1",
             json={"key": "TEST1", "projectCategory": {"id": "10001"}},
-            status=200
+            status=200,
         )
 
         result = project_gen.assign_project_to_category("TEST1", "10001")
@@ -238,8 +223,8 @@ class TestProjectGeneratorVersions:
             responses.add(
                 responses.POST,
                 f"{JIRA_URL}/rest/api/3/version",
-                json={"id": f"1000{i+1}", "name": f"TEST v{i+1}.0"},
-                status=201
+                json={"id": f"1000{i + 1}", "name": f"TEST v{i + 1}.0"},
+                status=201,
             )
 
         with patch("time.sleep"):
@@ -260,10 +245,7 @@ class TestProjectGeneratorVersions:
         """Test create_versions_async."""
         with aioresponses() as m:
             for i in range(3):
-                m.post(
-                    f"{JIRA_URL}/rest/api/3/version",
-                    payload={"id": f"1000{i+1}", "name": f"TEST v{i+1}.0"}
-                )
+                m.post(f"{JIRA_URL}/rest/api/3/version", payload={"id": f"1000{i + 1}", "name": f"TEST v{i + 1}.0"})
 
             versions = await project_gen.create_versions_async("TEST1", 3)
 
@@ -288,8 +270,8 @@ class TestProjectGeneratorComponents:
             responses.add(
                 responses.POST,
                 f"{JIRA_URL}/rest/api/3/component",
-                json={"id": f"1000{i+1}", "name": f"TEST-Component-{i+1}"},
-                status=201
+                json={"id": f"1000{i + 1}", "name": f"TEST-Component-{i + 1}"},
+                status=201,
             )
 
         with patch("time.sleep"):
@@ -312,7 +294,7 @@ class TestProjectGeneratorComponents:
             for i in range(3):
                 m.post(
                     f"{JIRA_URL}/rest/api/3/component",
-                    payload={"id": f"1000{i+1}", "name": f"TEST-Component-{i+1}"}
+                    payload={"id": f"1000{i + 1}", "name": f"TEST-Component-{i + 1}"},
                 )
 
             components = await project_gen.create_components_async("TEST1", 3)
@@ -334,11 +316,7 @@ class TestProjectGeneratorProperties:
     @responses.activate
     def test_create_project_property(self, project_gen):
         """Test create_project_property."""
-        responses.add(
-            responses.PUT,
-            f"{JIRA_URL}/rest/api/3/project/TEST1/properties/test_property_1",
-            status=201
-        )
+        responses.add(responses.PUT, f"{JIRA_URL}/rest/api/3/project/TEST1/properties/test_property_1", status=201)
 
         result = project_gen.create_project_property("TEST1", "test_property_1", {"key": "value"})
 
@@ -354,14 +332,10 @@ class TestProjectGeneratorProperties:
         """Test create_project_properties."""
         for i in range(3):
             responses.add(
-                responses.PUT,
-                f"{JIRA_URL}/rest/api/3/project/TEST1/properties/test_property_{i+1}",
-                status=201
+                responses.PUT, f"{JIRA_URL}/rest/api/3/project/TEST1/properties/test_property_{i + 1}", status=201
             )
             responses.add(
-                responses.PUT,
-                f"{JIRA_URL}/rest/api/3/project/TEST2/properties/test_property_{i+1}",
-                status=201
+                responses.PUT, f"{JIRA_URL}/rest/api/3/project/TEST2/properties/test_property_{i + 1}", status=201
             )
 
         with patch("time.sleep"):
@@ -374,10 +348,7 @@ class TestProjectGeneratorProperties:
         """Test create_project_properties_async."""
         with aioresponses() as m:
             for i in range(3):
-                m.put(
-                    f"{JIRA_URL}/rest/api/3/project/TEST1/properties/test_property_{i+1}",
-                    status=201
-                )
+                m.put(f"{JIRA_URL}/rest/api/3/project/TEST1/properties/test_property_{i + 1}", status=201)
 
             count = await project_gen.create_project_properties_async(["TEST1"], 3)
 
@@ -396,9 +367,9 @@ class TestProjectGeneratorRoles:
             f"{JIRA_URL}/rest/api/3/project/TEST1/role",
             json={
                 "Administrators": f"{JIRA_URL}/rest/api/3/project/TEST1/role/10002",
-                "Developers": f"{JIRA_URL}/rest/api/3/project/TEST1/role/10003"
+                "Developers": f"{JIRA_URL}/rest/api/3/project/TEST1/role/10003",
             },
-            status=200
+            status=200,
         )
 
         role_id = project_gen.get_project_admin_role_id("TEST1")
@@ -418,9 +389,9 @@ class TestProjectGeneratorRoles:
             f"{JIRA_URL}/rest/api/3/project/TEST1/role",
             json={
                 "Users": f"{JIRA_URL}/rest/api/3/project/TEST1/role/10003",
-                "Administrators": f"{JIRA_URL}/rest/api/3/project/TEST1/role/10002"
+                "Administrators": f"{JIRA_URL}/rest/api/3/project/TEST1/role/10002",
             },
-            status=200
+            status=200,
         )
 
         role_id = project_gen.get_project_viewer_role_id("TEST1")
@@ -435,12 +406,7 @@ class TestProjectGeneratorRoles:
     @responses.activate
     def test_add_user_to_project_role(self, project_gen):
         """Test add_user_to_project_role."""
-        responses.add(
-            responses.POST,
-            f"{JIRA_URL}/rest/api/3/project/TEST1/role/10002",
-            json={"id": 10002},
-            status=200
-        )
+        responses.add(responses.POST, f"{JIRA_URL}/rest/api/3/project/TEST1/role/10002", json={"id": 10002}, status=200)
 
         result = project_gen.add_user_to_project_role("TEST1", "10002", "user-123")
 
@@ -458,17 +424,11 @@ class TestProjectGeneratorRoles:
         responses.add(
             responses.GET,
             f"{JIRA_URL}/rest/api/3/project/TEST1/role",
-            json={
-                "Administrators": f"{JIRA_URL}/rest/api/3/project/TEST1/role/10002"
-            },
-            status=200
+            json={"Administrators": f"{JIRA_URL}/rest/api/3/project/TEST1/role/10002"},
+            status=200,
         )
         # Mock add user
-        responses.add(
-            responses.POST,
-            f"{JIRA_URL}/rest/api/3/project/TEST1/role/10002",
-            status=200
-        )
+        responses.add(responses.POST, f"{JIRA_URL}/rest/api/3/project/TEST1/role/10002", status=200)
 
         with patch("time.sleep"):
             result = project_gen.add_users_to_project("TEST1", ["user-123"])
@@ -489,31 +449,19 @@ class TestProjectGeneratorWithCheckpoint:
     def test_create_projects_with_checkpoint(self, project_gen_with_checkpoint):
         """Test create_projects updates checkpoint."""
         # Mock current user
+        responses.add(responses.GET, f"{JIRA_URL}/rest/api/3/myself", json={"accountId": "user-123"}, status=200)
         responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/myself",
-            json={"accountId": "user-123"},
-            status=200
-        )
-        responses.add(
-            responses.POST,
-            f"{JIRA_URL}/rest/api/3/project",
-            json={"key": "TEST1", "id": "10001"},
-            status=201
+            responses.POST, f"{JIRA_URL}/rest/api/3/project", json={"key": "TEST1", "id": "10001"}, status=201
         )
         # Mock get admin role
         responses.add(
             responses.GET,
             f"{JIRA_URL}/rest/api/3/project/TEST1/role",
             json={"Administrators": f"{JIRA_URL}/rest/api/3/project/TEST1/role/10002"},
-            status=200
+            status=200,
         )
         # Mock add user to role
-        responses.add(
-            responses.POST,
-            f"{JIRA_URL}/rest/api/3/project/TEST1/role/10002",
-            status=200
-        )
+        responses.add(responses.POST, f"{JIRA_URL}/rest/api/3/project/TEST1/role/10002", status=200)
 
         with patch("time.sleep"):
             projects = project_gen_with_checkpoint.create_projects(1)

@@ -380,12 +380,7 @@ class TestJiraAPIClientSyncAPICalls:
     @responses.activate
     def test_api_call_success(self, base_client_kwargs):
         """Test successful API call."""
-        responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/myself",
-            json={"accountId": "123"},
-            status=200
-        )
+        responses.add(responses.GET, f"{JIRA_URL}/rest/api/3/myself", json={"accountId": "123"}, status=200)
 
         client = JiraAPIClient(**base_client_kwargs)
         response = client._api_call("GET", "myself")
@@ -405,18 +400,9 @@ class TestJiraAPIClientSyncAPICalls:
     def test_api_call_429_retry(self, base_client_kwargs):
         """Test API call retries on 429."""
         responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/test",
-            json={},
-            status=429,
-            headers={"Retry-After": "0.01"}
+            responses.GET, f"{JIRA_URL}/rest/api/3/test", json={}, status=429, headers={"Retry-After": "0.01"}
         )
-        responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/test",
-            json={"success": True},
-            status=200
-        )
+        responses.add(responses.GET, f"{JIRA_URL}/rest/api/3/test", json={"success": True}, status=200)
 
         client = JiraAPIClient(**base_client_kwargs)
         with patch("time.sleep"):
@@ -428,12 +414,7 @@ class TestJiraAPIClientSyncAPICalls:
     @responses.activate
     def test_api_call_client_error(self, base_client_kwargs):
         """Test API call handles 4xx errors."""
-        responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/test",
-            json={"error": "Not found"},
-            status=404
-        )
+        responses.add(responses.GET, f"{JIRA_URL}/rest/api/3/test", json={"error": "Not found"}, status=404)
 
         client = JiraAPIClient(**base_client_kwargs)
         response = client._api_call("GET", "test")
@@ -447,7 +428,7 @@ class TestJiraAPIClientSyncAPICalls:
             responses.POST,
             f"{JIRA_URL}/rest/api/3/project",
             json={"errorMessages": ["Project already exists"]},
-            status=400
+            status=400,
         )
 
         client = JiraAPIClient(**base_client_kwargs)
@@ -458,18 +439,10 @@ class TestJiraAPIClientSyncAPICalls:
     @responses.activate
     def test_api_call_custom_base_url(self, base_client_kwargs):
         """Test API call with custom base URL."""
-        responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/agile/1.0/board",
-            json={"values": []},
-            status=200
-        )
+        responses.add(responses.GET, f"{JIRA_URL}/rest/agile/1.0/board", json={"values": []}, status=200)
 
         client = JiraAPIClient(**base_client_kwargs)
-        response = client._api_call(
-            "GET", "board",
-            base_url=f"{JIRA_URL}/rest/agile/1.0"
-        )
+        response = client._api_call("GET", "board", base_url=f"{JIRA_URL}/rest/agile/1.0")
 
         assert response is not None
         assert response.status_code == 200
@@ -477,12 +450,7 @@ class TestJiraAPIClientSyncAPICalls:
     @responses.activate
     def test_api_call_records_request(self, base_client_kwargs):
         """Test API call records request in benchmark."""
-        responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/test",
-            json={},
-            status=200
-        )
+        responses.add(responses.GET, f"{JIRA_URL}/rest/api/3/test", json={}, status=200)
 
         benchmark = BenchmarkTracker()
         kwargs = {**base_client_kwargs, "benchmark": benchmark}
@@ -502,10 +470,7 @@ class TestJiraAPIClientAsyncAPICalls:
         client = JiraAPIClient(**base_client_kwargs)
 
         with aioresponses() as m:
-            m.get(
-                f"{JIRA_URL}/rest/api/3/myself",
-                payload={"accountId": "123"}
-            )
+            m.get(f"{JIRA_URL}/rest/api/3/myself", payload={"accountId": "123"})
 
             success, result = await client._api_call_async("GET", "myself")
 
@@ -530,15 +495,9 @@ class TestJiraAPIClientAsyncAPICalls:
         client = JiraAPIClient(**base_client_kwargs)
 
         with aioresponses() as m:
-            m.post(
-                f"{JIRA_URL}/rest/api/3/issue/TEST-1/watchers",
-                status=204
-            )
+            m.post(f"{JIRA_URL}/rest/api/3/issue/TEST-1/watchers", status=204)
 
-            success, result = await client._api_call_async(
-                "POST", "issue/TEST-1/watchers",
-                data="user-123"
-            )
+            success, result = await client._api_call_async("POST", "issue/TEST-1/watchers", data="user-123")
 
             assert success is True
             assert result is None
@@ -551,11 +510,7 @@ class TestJiraAPIClientAsyncAPICalls:
         client = JiraAPIClient(**base_client_kwargs)
 
         with aioresponses() as m:
-            m.get(
-                f"{JIRA_URL}/rest/api/3/test",
-                status=404,
-                payload={"error": "Not found"}
-            )
+            m.get(f"{JIRA_URL}/rest/api/3/test", status=404, payload={"error": "Not found"})
 
             success, result = await client._api_call_async("GET", "test")
 
@@ -570,16 +525,9 @@ class TestJiraAPIClientAsyncAPICalls:
         client = JiraAPIClient(**base_client_kwargs)
 
         with aioresponses() as m:
-            m.post(
-                f"{JIRA_URL}/rest/api/3/project",
-                status=400,
-                payload={"errorMessages": ["already exists"]}
-            )
+            m.post(f"{JIRA_URL}/rest/api/3/project", status=400, payload={"errorMessages": ["already exists"]})
 
-            success, result = await client._api_call_async(
-                "POST", "project",
-                data={"key": "TEST"}
-            )
+            success, result = await client._api_call_async("POST", "project", data={"key": "TEST"})
 
             assert success is False
 
@@ -591,15 +539,9 @@ class TestJiraAPIClientAsyncAPICalls:
         client = JiraAPIClient(**base_client_kwargs)
 
         with aioresponses() as m:
-            m.get(
-                f"{JIRA_URL}/rest/agile/1.0/board",
-                payload={"values": []}
-            )
+            m.get(f"{JIRA_URL}/rest/agile/1.0/board", payload={"values": []})
 
-            success, result = await client._api_call_async(
-                "GET", "board",
-                base_url=f"{JIRA_URL}/rest/agile/1.0"
-            )
+            success, result = await client._api_call_async("GET", "board", base_url=f"{JIRA_URL}/rest/agile/1.0")
 
             assert success is True
             assert result["values"] == []
@@ -617,7 +559,7 @@ class TestJiraAPIClientUserMethods:
             responses.GET,
             f"{JIRA_URL}/rest/api/3/myself",
             json={"accountId": "user-123", "emailAddress": TEST_EMAIL},
-            status=200
+            status=200,
         )
 
         client = JiraAPIClient(**base_client_kwargs)
@@ -635,11 +577,7 @@ class TestJiraAPIClientUserMethods:
     @responses.activate
     def test_get_current_user_account_id_error(self, base_client_kwargs):
         """Test get_current_user_account_id handles errors."""
-        responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/api/3/myself",
-            status=401
-        )
+        responses.add(responses.GET, f"{JIRA_URL}/rest/api/3/myself", status=401)
 
         client = JiraAPIClient(**base_client_kwargs)
         account_id = client.get_current_user_account_id()
@@ -658,7 +596,7 @@ class TestJiraAPIClientUserMethods:
                 {"accountId": "app-user", "active": True, "accountType": "app"},  # Should be filtered
                 {"accountId": "inactive", "active": False, "accountType": "atlassian"},  # Should be filtered
             ],
-            status=200
+            status=200,
         )
 
         client = JiraAPIClient(**base_client_kwargs)
@@ -685,31 +623,22 @@ class TestJiraAPIClientUserMethods:
         responses.add(
             responses.GET,
             f"{JIRA_URL}/rest/api/3/users/search",
-            json=[
-                {"accountId": f"user-{i}", "active": True, "accountType": "atlassian"}
-                for i in range(1, 51)
-            ],
-            status=200
+            json=[{"accountId": f"user-{i}", "active": True, "accountType": "atlassian"} for i in range(1, 51)],
+            status=200,
         )
         # Second page (50 more users)
         responses.add(
             responses.GET,
             f"{JIRA_URL}/rest/api/3/users/search",
-            json=[
-                {"accountId": f"user-{i}", "active": True, "accountType": "atlassian"}
-                for i in range(51, 101)
-            ],
-            status=200
+            json=[{"accountId": f"user-{i}", "active": True, "accountType": "atlassian"} for i in range(51, 101)],
+            status=200,
         )
         # Third page (less than 50 - indicates end)
         responses.add(
             responses.GET,
             f"{JIRA_URL}/rest/api/3/users/search",
-            json=[
-                {"accountId": f"user-{i}", "active": True, "accountType": "atlassian"}
-                for i in range(101, 111)
-            ],
-            status=200
+            json=[{"accountId": f"user-{i}", "active": True, "accountType": "atlassian"} for i in range(101, 111)],
+            status=200,
         )
 
         client = JiraAPIClient(**base_client_kwargs)
@@ -729,16 +658,9 @@ class TestJiraAPIClientAsyncRateLimiting:
 
         with aioresponses() as m:
             # First call returns 429
-            m.get(
-                f"{JIRA_URL}/rest/api/3/test",
-                status=429,
-                headers={"Retry-After": "0.01"}
-            )
+            m.get(f"{JIRA_URL}/rest/api/3/test", status=429, headers={"Retry-After": "0.01"})
             # Second call succeeds
-            m.get(
-                f"{JIRA_URL}/rest/api/3/test",
-                payload={"success": True}
-            )
+            m.get(f"{JIRA_URL}/rest/api/3/test", payload={"success": True})
 
             success, result = await client._api_call_async("GET", "test")
 
@@ -754,15 +676,9 @@ class TestJiraAPIClientAsyncRateLimiting:
 
         with aioresponses() as m:
             # First call returns 500
-            m.get(
-                f"{JIRA_URL}/rest/api/3/test",
-                status=500
-            )
+            m.get(f"{JIRA_URL}/rest/api/3/test", status=500)
             # Second call succeeds
-            m.get(
-                f"{JIRA_URL}/rest/api/3/test",
-                payload={"success": True}
-            )
+            m.get(f"{JIRA_URL}/rest/api/3/test", payload={"success": True})
 
             success, result = await client._api_call_async("GET", "test")
 

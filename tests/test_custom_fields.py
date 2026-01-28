@@ -33,11 +33,26 @@ class TestCustomFieldTypes:
     def test_custom_field_types_defined(self):
         """Test CUSTOM_FIELD_TYPES has all expected types."""
         expected_types = [
-            "textfield", "textarea", "float", "datepicker", "datetime",
-            "select", "multiselect", "radiobuttons", "multicheckboxes",
-            "userpicker", "multiuserpicker", "grouppicker", "multigrouppicker",
-            "cascadingselect", "labels", "url", "project", "version",
-            "multiversion", "readonlyfield"
+            "textfield",
+            "textarea",
+            "float",
+            "datepicker",
+            "datetime",
+            "select",
+            "multiselect",
+            "radiobuttons",
+            "multicheckboxes",
+            "userpicker",
+            "multiuserpicker",
+            "grouppicker",
+            "multigrouppicker",
+            "cascadingselect",
+            "labels",
+            "url",
+            "project",
+            "version",
+            "multiversion",
+            "readonlyfield",
         ]
         for field_type in expected_types:
             assert field_type in CUSTOM_FIELD_TYPES
@@ -90,13 +105,11 @@ class TestCustomFieldGeneratorFields:
             responses.POST,
             f"{JIRA_URL}/rest/api/3/field",
             json={"id": "customfield_10001", "name": "TEST Text Field 1"},
-            status=201
+            status=201,
         )
 
         field = custom_field_gen.create_custom_field(
-            name="TEST Text Field 1",
-            field_type="textfield",
-            description="Test description"
+            name="TEST Text Field 1", field_type="textfield", description="Test description"
         )
 
         assert field is not None
@@ -105,10 +118,7 @@ class TestCustomFieldGeneratorFields:
 
     def test_create_custom_field_dry_run(self, custom_field_gen_dry_run):
         """Test create_custom_field in dry run."""
-        field = custom_field_gen_dry_run.create_custom_field(
-            name="TEST Text Field 1",
-            field_type="textfield"
-        )
+        field = custom_field_gen_dry_run.create_custom_field(name="TEST Text Field 1", field_type="textfield")
 
         assert field is not None
         assert "id" in field
@@ -116,10 +126,7 @@ class TestCustomFieldGeneratorFields:
 
     def test_create_custom_field_invalid_type(self, custom_field_gen):
         """Test create_custom_field with invalid type."""
-        field = custom_field_gen.create_custom_field(
-            name="Invalid Field",
-            field_type="nonexistent_type"
-        )
+        field = custom_field_gen.create_custom_field(name="Invalid Field", field_type="nonexistent_type")
         assert field is None
 
     @responses.activate
@@ -129,21 +136,21 @@ class TestCustomFieldGeneratorFields:
             responses.add(
                 responses.POST,
                 f"{JIRA_URL}/rest/api/3/field",
-                json={"id": f"customfield_1000{i+1}", "name": f"Field {i+1}"},
-                status=201
+                json={"id": f"customfield_1000{i + 1}", "name": f"Field {i + 1}"},
+                status=201,
             )
             # For select types, need context and options responses
             responses.add(
                 responses.GET,
-                f"{JIRA_URL}/rest/api/3/field/customfield_1000{i+1}/context",
+                f"{JIRA_URL}/rest/api/3/field/customfield_1000{i + 1}/context",
                 json={"values": [{"id": "10001"}]},
-                status=200
+                status=200,
             )
             responses.add(
                 responses.POST,
-                f"{JIRA_URL}/rest/api/3/field/customfield_1000{i+1}/context/10001/option",
+                f"{JIRA_URL}/rest/api/3/field/customfield_1000{i + 1}/context/10001/option",
                 json={"options": []},
-                status=201
+                status=201,
             )
 
         with patch("time.sleep"):
@@ -162,16 +169,14 @@ class TestCustomFieldGeneratorFields:
         with aioresponses() as m:
             for i in range(3):
                 m.post(
-                    f"{JIRA_URL}/rest/api/3/field",
-                    payload={"id": f"customfield_1000{i+1}", "name": f"Field {i+1}"}
+                    f"{JIRA_URL}/rest/api/3/field", payload={"id": f"customfield_1000{i + 1}", "name": f"Field {i + 1}"}
                 )
                 m.get(
-                    f"{JIRA_URL}/rest/api/3/field/customfield_1000{i+1}/context",
-                    payload={"values": [{"id": "10001"}]}
+                    f"{JIRA_URL}/rest/api/3/field/customfield_1000{i + 1}/context",
+                    payload={"values": [{"id": "10001"}]},
                 )
                 m.post(
-                    f"{JIRA_URL}/rest/api/3/field/customfield_1000{i+1}/context/10001/option",
-                    payload={"options": []}
+                    f"{JIRA_URL}/rest/api/3/field/customfield_1000{i + 1}/context/10001/option", payload={"options": []}
                 )
 
             fields = await custom_field_gen.create_custom_fields_async(3)
@@ -196,7 +201,7 @@ class TestCustomFieldGeneratorContexts:
             responses.GET,
             f"{JIRA_URL}/rest/api/3/field/customfield_10001/context",
             json={"values": [{"id": "10001", "name": "Default Context"}]},
-            status=200
+            status=200,
         )
 
         contexts = custom_field_gen.get_field_contexts("customfield_10001")
@@ -217,7 +222,7 @@ class TestCustomFieldGeneratorContexts:
             responses.POST,
             f"{JIRA_URL}/rest/api/3/field/customfield_10001/context",
             json={"values": [{"id": "10002", "name": "Custom Context"}]},
-            status=201
+            status=201,
         )
 
         context = custom_field_gen.create_field_context(
@@ -225,7 +230,7 @@ class TestCustomFieldGeneratorContexts:
             name="Custom Context",
             description="Test context",
             project_ids=["10001"],
-            issue_type_ids=["10001"]
+            issue_type_ids=["10001"],
         )
 
         assert context is not None
@@ -234,10 +239,7 @@ class TestCustomFieldGeneratorContexts:
 
     def test_create_field_context_dry_run(self, custom_field_gen_dry_run):
         """Test create_field_context in dry run."""
-        context = custom_field_gen_dry_run.create_field_context(
-            field_id="customfield_10001",
-            name="Custom Context"
-        )
+        context = custom_field_gen_dry_run.create_field_context(field_id="customfield_10001", name="Custom Context")
 
         assert context is not None
         assert "id" in context
@@ -252,17 +254,12 @@ class TestCustomFieldGeneratorOptions:
         responses.add(
             responses.POST,
             f"{JIRA_URL}/rest/api/3/field/customfield_10001/context/10001/option",
-            json={"options": [
-                {"id": "10001", "value": "Option 1"},
-                {"id": "10002", "value": "Option 2"}
-            ]},
-            status=201
+            json={"options": [{"id": "10001", "value": "Option 1"}, {"id": "10002", "value": "Option 2"}]},
+            status=201,
         )
 
         options = custom_field_gen.create_field_options(
-            field_id="customfield_10001",
-            context_id="10001",
-            options=["Option 1", "Option 2"]
+            field_id="customfield_10001", context_id="10001", options=["Option 1", "Option 2"]
         )
 
         assert len(options) == 2
@@ -271,9 +268,7 @@ class TestCustomFieldGeneratorOptions:
     def test_create_field_options_dry_run(self, custom_field_gen_dry_run):
         """Test create_field_options in dry run."""
         options = custom_field_gen_dry_run.create_field_options(
-            field_id="customfield_10001",
-            context_id="10001",
-            options=["Option 1", "Option 2", "Option 3"]
+            field_id="customfield_10001", context_id="10001", options=["Option 1", "Option 2", "Option 3"]
         )
 
         assert len(options) == 3
@@ -281,11 +276,7 @@ class TestCustomFieldGeneratorOptions:
 
     def test_create_field_options_empty(self, custom_field_gen):
         """Test create_field_options with empty list."""
-        options = custom_field_gen.create_field_options(
-            field_id="customfield_10001",
-            context_id="10001",
-            options=[]
-        )
+        options = custom_field_gen.create_field_options(field_id="customfield_10001", context_id="10001", options=[])
         assert options == []
 
     @responses.activate
@@ -295,13 +286,13 @@ class TestCustomFieldGeneratorOptions:
             responses.GET,
             f"{JIRA_URL}/rest/api/3/field/customfield_10001/context",
             json={"values": [{"id": "10001"}]},
-            status=200
+            status=200,
         )
         responses.add(
             responses.POST,
             f"{JIRA_URL}/rest/api/3/field/customfield_10001/context/10001/option",
             json={"options": [{"id": "10001", "value": "Option 1"}]},
-            status=201
+            status=201,
         )
 
         field_obj = {"id": "customfield_10001", "type_key": "select"}
@@ -320,7 +311,7 @@ class TestCustomFieldGeneratorConfigurations:
             responses.GET,
             f"{JIRA_URL}/rest/api/3/fieldconfiguration",
             json={"values": [{"id": 10000, "name": "Default Configuration"}]},
-            status=200
+            status=200,
         )
 
         configs = custom_field_gen.get_field_configurations()
@@ -340,12 +331,11 @@ class TestCustomFieldGeneratorConfigurations:
             responses.POST,
             f"{JIRA_URL}/rest/api/3/fieldconfiguration",
             json={"id": 10001, "name": "Custom Configuration"},
-            status=201
+            status=201,
         )
 
         config = custom_field_gen.create_field_configuration(
-            name="Custom Configuration",
-            description="Test configuration"
+            name="Custom Configuration", description="Test configuration"
         )
 
         assert config is not None
@@ -353,9 +343,7 @@ class TestCustomFieldGeneratorConfigurations:
 
     def test_create_field_configuration_dry_run(self, custom_field_gen_dry_run):
         """Test create_field_configuration in dry run."""
-        config = custom_field_gen_dry_run.create_field_configuration(
-            name="Custom Configuration"
-        )
+        config = custom_field_gen_dry_run.create_field_configuration(name="Custom Configuration")
 
         assert config is not None
         assert "id" in config
@@ -367,22 +355,17 @@ class TestCustomFieldGeneratorConfigurations:
             responses.POST,
             f"{JIRA_URL}/rest/api/3/fieldconfigurationscheme",
             json={"id": 10001, "name": "Custom Scheme"},
-            status=201
+            status=201,
         )
 
-        scheme = custom_field_gen.create_field_configuration_scheme(
-            name="Custom Scheme",
-            description="Test scheme"
-        )
+        scheme = custom_field_gen.create_field_configuration_scheme(name="Custom Scheme", description="Test scheme")
 
         assert scheme is not None
         assert scheme["id"] == 10001
 
     def test_create_field_configuration_scheme_dry_run(self, custom_field_gen_dry_run):
         """Test create_field_configuration_scheme in dry run."""
-        scheme = custom_field_gen_dry_run.create_field_configuration_scheme(
-            name="Custom Scheme"
-        )
+        scheme = custom_field_gen_dry_run.create_field_configuration_scheme(name="Custom Scheme")
 
         assert scheme is not None
         assert "id" in scheme
@@ -395,10 +378,7 @@ class TestCustomFieldGeneratorAsync:
     async def test_get_field_contexts_async(self, custom_field_gen):
         """Test _get_field_contexts_async."""
         with aioresponses() as m:
-            m.get(
-                f"{JIRA_URL}/rest/api/3/field/customfield_10001/context",
-                payload={"values": [{"id": "10001"}]}
-            )
+            m.get(f"{JIRA_URL}/rest/api/3/field/customfield_10001/context", payload={"values": [{"id": "10001"}]})
 
             contexts = await custom_field_gen._get_field_contexts_async("customfield_10001")
 
@@ -416,18 +396,12 @@ class TestCustomFieldGeneratorAsync:
         """Test _create_options_for_fields_async."""
         fields = [
             {"id": "customfield_10001", "type_key": "select"},
-            {"id": "customfield_10002", "type_key": "textfield"}  # No options needed
+            {"id": "customfield_10002", "type_key": "textfield"},  # No options needed
         ]
 
         with aioresponses() as m:
-            m.get(
-                f"{JIRA_URL}/rest/api/3/field/customfield_10001/context",
-                payload={"values": [{"id": "10001"}]}
-            )
-            m.post(
-                f"{JIRA_URL}/rest/api/3/field/customfield_10001/context/10001/option",
-                payload={"options": []}
-            )
+            m.get(f"{JIRA_URL}/rest/api/3/field/customfield_10001/context", payload={"values": [{"id": "10001"}]})
+            m.post(f"{JIRA_URL}/rest/api/3/field/customfield_10001/context/10001/option", payload={"options": []})
 
             await custom_field_gen._create_options_for_fields_async(fields)
 

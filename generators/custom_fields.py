@@ -7,10 +7,9 @@ Handles creation of custom fields, contexts, and options.
 import asyncio
 import random
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 from .base import JiraAPIClient
-
 
 # Custom field type definitions with their searcher keys
 # Reference: https://support.atlassian.com/jira/kb/jira-software-rest-api-essential-parameters-for-custom-field-creation/
@@ -18,115 +17,124 @@ CUSTOM_FIELD_TYPES = {
     "textfield": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:textfield",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:textsearcher",
-        "description": "Text Field (single line)"
+        "description": "Text Field (single line)",
     },
     "textarea": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:textarea",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:textsearcher",
-        "description": "Text Field (multi-line)"
+        "description": "Text Field (multi-line)",
     },
     "float": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:float",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:exactnumber",
-        "description": "Number Field"
+        "description": "Number Field",
     },
     "datepicker": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:datepicker",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:daterange",
-        "description": "Date Picker"
+        "description": "Date Picker",
     },
     "datetime": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:datetime",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:datetimerange",
-        "description": "Date Time Picker"
+        "description": "Date Time Picker",
     },
     "select": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:select",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:multiselectsearcher",
         "description": "Select List (single choice)",
-        "has_options": True
+        "has_options": True,
     },
     "multiselect": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:multiselect",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:multiselectsearcher",
         "description": "Select List (multiple choices)",
-        "has_options": True
+        "has_options": True,
     },
     "radiobuttons": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:radiobuttons",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:multiselectsearcher",
         "description": "Radio Buttons",
-        "has_options": True
+        "has_options": True,
     },
     "multicheckboxes": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:multicheckboxes",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:multiselectsearcher",
         "description": "Checkboxes",
-        "has_options": True
+        "has_options": True,
     },
     "userpicker": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:userpicker",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:userpickergroupsearcher",
-        "description": "User Picker (single user)"
+        "description": "User Picker (single user)",
     },
     "multiuserpicker": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:multiuserpicker",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:userpickergroupsearcher",
-        "description": "User Picker (multiple users)"
+        "description": "User Picker (multiple users)",
     },
     "grouppicker": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:grouppicker",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:grouppickersearcher",
-        "description": "Group Picker (single group)"
+        "description": "Group Picker (single group)",
     },
     "multigrouppicker": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:multigrouppicker",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:grouppickersearcher",
-        "description": "Group Picker (multiple groups)"
+        "description": "Group Picker (multiple groups)",
     },
     "cascadingselect": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:cascadingselect",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:cascadingselectsearcher",
         "description": "Select List (cascading)",
-        "has_options": True
+        "has_options": True,
     },
     "labels": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:labels",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:labelsearcher",
-        "description": "Labels"
+        "description": "Labels",
     },
     "url": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:url",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:exacttextsearcher",
-        "description": "URL Field"
+        "description": "URL Field",
     },
     "project": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:project",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:projectsearcher",
-        "description": "Project Picker (single project)"
+        "description": "Project Picker (single project)",
     },
     "version": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:version",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:versionsearcher",
-        "description": "Version Picker (single version)"
+        "description": "Version Picker (single version)",
     },
     "multiversion": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:multiversion",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:versionsearcher",
-        "description": "Version Picker (multiple versions)"
+        "description": "Version Picker (multiple versions)",
     },
     "readonlyfield": {
         "type": "com.atlassian.jira.plugin.system.customfieldtypes:readonlyfield",
         "searcherKey": "com.atlassian.jira.plugin.system.customfieldtypes:textsearcher",
-        "description": "Text Field (read only)"
-    }
+        "description": "Text Field (read only)",
+    },
 }
 
 # Field types to use when generating random custom fields (excluding read-only)
 GENERATABLE_FIELD_TYPES = [
-    "textfield", "textarea", "float", "datepicker", "datetime",
-    "select", "multiselect", "radiobuttons", "multicheckboxes",
-    "userpicker", "labels", "url"
+    "textfield",
+    "textarea",
+    "float",
+    "datepicker",
+    "datetime",
+    "select",
+    "multiselect",
+    "radiobuttons",
+    "multicheckboxes",
+    "userpicker",
+    "labels",
+    "url",
 ]
 
 
@@ -142,16 +150,16 @@ class CustomFieldGenerator(JiraAPIClient):
         dry_run: bool = False,
         concurrency: int = 5,
         benchmark=None,
-        request_delay: float = 0.0
+        request_delay: float = 0.0,
     ):
         super().__init__(jira_url, email, api_token, dry_run, concurrency, benchmark, request_delay)
         self.prefix = prefix
         self.run_id = f"{prefix}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
         # Track created items
-        self.created_fields: List[Dict] = []
-        self.created_contexts: List[Dict] = []
-        self.created_options: List[Dict] = []
+        self.created_fields: list[dict] = []
+        self.created_contexts: list[dict] = []
+        self.created_options: list[dict] = []
 
     def set_run_id(self, run_id: str):
         """Set the run ID (should match the main generator's run ID)."""
@@ -159,12 +167,7 @@ class CustomFieldGenerator(JiraAPIClient):
 
     # ========== CUSTOM FIELDS ==========
 
-    def create_custom_field(
-        self,
-        name: str,
-        field_type: str,
-        description: Optional[str] = None
-    ) -> Optional[Dict]:
+    def create_custom_field(self, name: str, field_type: str, description: Optional[str] = None) -> Optional[dict]:
         """Create a custom field.
 
         Args:
@@ -181,27 +184,18 @@ class CustomFieldGenerator(JiraAPIClient):
 
         field_config = CUSTOM_FIELD_TYPES[field_type]
 
-        field_data = {
-            "name": name,
-            "type": field_config["type"],
-            "searcherKey": field_config["searcherKey"]
-        }
+        field_data = {"name": name, "type": field_config["type"], "searcherKey": field_config["searcherKey"]}
 
         if description:
             field_data["description"] = description
 
         if self.dry_run:
             field_id = f"customfield_{random.randint(10000, 99999)}"
-            field_obj = {
-                "id": field_id,
-                "name": name,
-                "type": field_type,
-                "schema": {"type": field_type}
-            }
+            field_obj = {"id": field_id, "name": name, "type": field_type, "schema": {"type": field_type}}
             self.created_fields.append(field_obj)
             return field_obj
 
-        response = self._api_call('POST', 'field', data=field_data)
+        response = self._api_call("POST", "field", data=field_data)
         if response:
             field_obj = response.json()
             field_obj["type_key"] = field_type  # Store our type key for reference
@@ -209,7 +203,7 @@ class CustomFieldGenerator(JiraAPIClient):
             return field_obj
         return None
 
-    def create_custom_fields(self, count: int) -> List[Dict]:
+    def create_custom_fields(self, count: int) -> list[dict]:
         """Create multiple custom fields with varying types.
 
         Args:
@@ -230,11 +224,7 @@ class CustomFieldGenerator(JiraAPIClient):
             name = f"{self.prefix} {type_desc} {i + 1}"
             description = f"Test custom field ({type_desc}) - {self.run_id}"
 
-            field_obj = self.create_custom_field(
-                name=name,
-                field_type=field_type,
-                description=description
-            )
+            field_obj = self.create_custom_field(name=name, field_type=field_type, description=description)
 
             if field_obj:
                 fields.append(field_obj)
@@ -248,7 +238,7 @@ class CustomFieldGenerator(JiraAPIClient):
 
     # ========== FIELD CONTEXTS ==========
 
-    def get_field_contexts(self, field_id: str) -> List[Dict]:
+    def get_field_contexts(self, field_id: str) -> list[dict]:
         """Get contexts for a custom field.
 
         Args:
@@ -260,9 +250,9 @@ class CustomFieldGenerator(JiraAPIClient):
         if self.dry_run:
             return [{"id": str(random.randint(10000, 99999)), "name": "Default Context"}]
 
-        response = self._api_call('GET', f'field/{field_id}/context')
+        response = self._api_call("GET", f"field/{field_id}/context")
         if response:
-            return response.json().get('values', [])
+            return response.json().get("values", [])
         return []
 
     def create_field_context(
@@ -270,9 +260,9 @@ class CustomFieldGenerator(JiraAPIClient):
         field_id: str,
         name: str,
         description: Optional[str] = None,
-        project_ids: Optional[List[str]] = None,
-        issue_type_ids: Optional[List[str]] = None
-    ) -> Optional[Dict]:
+        project_ids: Optional[list[str]] = None,
+        issue_type_ids: Optional[list[str]] = None,
+    ) -> Optional[dict]:
         """Create a context for a custom field.
 
         Args:
@@ -285,9 +275,7 @@ class CustomFieldGenerator(JiraAPIClient):
         Returns:
             Context dict or None on failure
         """
-        context_data = {
-            "name": name
-        }
+        context_data = {"name": name}
 
         if description:
             context_data["description"] = description
@@ -297,19 +285,15 @@ class CustomFieldGenerator(JiraAPIClient):
             context_data["issueTypeIds"] = issue_type_ids
 
         if self.dry_run:
-            context = {
-                "id": str(random.randint(10000, 99999)),
-                "name": name,
-                "fieldId": field_id
-            }
+            context = {"id": str(random.randint(10000, 99999)), "name": name, "fieldId": field_id}
             self.created_contexts.append(context)
             return context
 
-        response = self._api_call('POST', f'field/{field_id}/context', data=context_data)
+        response = self._api_call("POST", f"field/{field_id}/context", data=context_data)
         if response:
             result = response.json()
             # The API returns a wrapper with 'values' array
-            contexts = result.get('values', [result])
+            contexts = result.get("values", [result])
             if contexts:
                 context = contexts[0]
                 self.created_contexts.append(context)
@@ -318,12 +302,7 @@ class CustomFieldGenerator(JiraAPIClient):
 
     # ========== FIELD OPTIONS ==========
 
-    def create_field_options(
-        self,
-        field_id: str,
-        context_id: str,
-        options: List[str]
-    ) -> List[Dict]:
+    def create_field_options(self, field_id: str, context_id: str, options: list[str]) -> list[dict]:
         """Create options for a select-type custom field.
 
         Args:
@@ -337,44 +316,31 @@ class CustomFieldGenerator(JiraAPIClient):
         if not options:
             return []
 
-        options_data = {
-            "options": [
-                {"value": opt, "disabled": False}
-                for opt in options
-            ]
-        }
+        options_data = {"options": [{"value": opt, "disabled": False} for opt in options]}
 
         if self.dry_run:
             created = []
-            for i, opt in enumerate(options):
-                option = {
-                    "id": str(random.randint(10000, 99999)),
-                    "value": opt,
-                    "disabled": False
-                }
+            for _i, opt in enumerate(options):
+                option = {"id": str(random.randint(10000, 99999)), "value": opt, "disabled": False}
                 created.append(option)
                 self.created_options.append(option)
             return created
 
-        response = self._api_call(
-            'POST',
-            f'field/{field_id}/context/{context_id}/option',
-            data=options_data
-        )
+        response = self._api_call("POST", f"field/{field_id}/context/{context_id}/option", data=options_data)
 
         if response:
             result = response.json()
-            created_options = result.get('options', [])
+            created_options = result.get("options", [])
             self.created_options.extend(created_options)
             return created_options
         return []
 
-    def _create_field_options_for_field(self, field_obj: Dict, num_options: int = 5) -> List[Dict]:
+    def _create_field_options_for_field(self, field_obj: dict, num_options: int = 5) -> list[dict]:
         """Helper to create options for a newly created field.
 
         Gets the default context and creates options.
         """
-        field_id = field_obj.get('id')
+        field_id = field_obj.get("id")
         if not field_id:
             return []
 
@@ -385,15 +351,12 @@ class CustomFieldGenerator(JiraAPIClient):
             return []
 
         # Use the first (default) context
-        context_id = contexts[0].get('id')
+        context_id = contexts[0].get("id")
         if not context_id:
             return []
 
         # Generate option values
-        option_values = [
-            f"{self.prefix} Option {i + 1}"
-            for i in range(num_options)
-        ]
+        option_values = [f"{self.prefix} Option {i + 1}" for i in range(num_options)]
 
         options = self.create_field_options(field_id, context_id, option_values)
         if options:
@@ -402,7 +365,7 @@ class CustomFieldGenerator(JiraAPIClient):
 
     # ========== ASYNC METHODS ==========
 
-    async def create_custom_fields_async(self, count: int) -> List[Dict]:
+    async def create_custom_fields_async(self, count: int) -> list[dict]:
         """Create multiple custom fields concurrently.
 
         Note: Field creation must be somewhat sequential because
@@ -429,7 +392,7 @@ class CustomFieldGenerator(JiraAPIClient):
                 "name": f"{self.prefix} {type_desc} {i + 1}",
                 "type": field_config["type"],
                 "searcherKey": field_config["searcherKey"],
-                "description": f"Test custom field ({type_desc}) - {self.run_id}"
+                "description": f"Test custom field ({type_desc}) - {self.run_id}",
             }
             field_requests.append((field_data, field_type))
 
@@ -438,11 +401,8 @@ class CustomFieldGenerator(JiraAPIClient):
         batch_size = self.concurrency * 2
 
         for i in range(0, len(field_requests), batch_size):
-            batch = field_requests[i:i + batch_size]
-            tasks = [
-                self._api_call_async('POST', 'field', data=fd)
-                for fd, _ in batch
-            ]
+            batch = field_requests[i : i + batch_size]
+            tasks = [self._api_call_async("POST", "field", data=fd) for fd, _ in batch]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             for idx, result in enumerate(results):
@@ -458,7 +418,7 @@ class CustomFieldGenerator(JiraAPIClient):
                         "id": field_id,
                         "name": batch[idx][0]["name"],
                         "type_key": field_type,
-                        "schema": {"type": field_type}
+                        "schema": {"type": field_type},
                     }
                     fields.append(field_obj)
                     self.created_fields.append(field_obj)
@@ -470,15 +430,14 @@ class CustomFieldGenerator(JiraAPIClient):
 
         return fields
 
-    async def _create_options_for_fields_async(self, fields: List[Dict]) -> None:
+    async def _create_options_for_fields_async(self, fields: list[dict]) -> None:
         """Create options for all select-type fields.
 
         Args:
             fields: List of field dicts that were created
         """
         select_fields = [
-            f for f in fields
-            if f.get("type_key") and CUSTOM_FIELD_TYPES.get(f["type_key"], {}).get("has_options")
+            f for f in fields if f.get("type_key") and CUSTOM_FIELD_TYPES.get(f["type_key"], {}).get("has_options")
         ]
 
         if not select_fields:
@@ -489,7 +448,7 @@ class CustomFieldGenerator(JiraAPIClient):
         # Get contexts for all select fields in parallel
         context_tasks = []
         for field_obj in select_fields:
-            field_id = field_obj.get('id')
+            field_id = field_obj.get("id")
             if field_id:
                 context_tasks.append(self._get_field_contexts_async(field_id))
 
@@ -498,7 +457,7 @@ class CustomFieldGenerator(JiraAPIClient):
         # Create options for each field
         option_tasks = []
         for i, field_obj in enumerate(select_fields):
-            field_id = field_obj.get('id')
+            field_id = field_obj.get("id")
             if not field_id:
                 continue
 
@@ -506,43 +465,34 @@ class CustomFieldGenerator(JiraAPIClient):
             if not contexts:
                 continue
 
-            context_id = contexts[0].get('id')
+            context_id = contexts[0].get("id")
             if not context_id:
                 continue
 
             option_values = [f"{self.prefix} Option {j + 1}" for j in range(5)]
-            options_data = {
-                "options": [{"value": opt, "disabled": False} for opt in option_values]
-            }
+            options_data = {"options": [{"value": opt, "disabled": False} for opt in option_values]}
             option_tasks.append(
-                self._api_call_async(
-                    'POST',
-                    f'field/{field_id}/context/{context_id}/option',
-                    data=options_data
-                )
+                self._api_call_async("POST", f"field/{field_id}/context/{context_id}/option", data=options_data)
             )
 
         if option_tasks:
             results = await asyncio.gather(*option_tasks, return_exceptions=True)
-            created_count = sum(
-                1 for r in results
-                if (isinstance(r, tuple) and r[0]) or self.dry_run
-            )
+            created_count = sum(1 for r in results if (isinstance(r, tuple) and r[0]) or self.dry_run)
             self.logger.info(f"Created options for {created_count} fields")
 
-    async def _get_field_contexts_async(self, field_id: str) -> List[Dict]:
+    async def _get_field_contexts_async(self, field_id: str) -> list[dict]:
         """Get contexts for a custom field asynchronously."""
         if self.dry_run:
             return [{"id": str(random.randint(10000, 99999)), "name": "Default Context"}]
 
-        success, result = await self._api_call_async('GET', f'field/{field_id}/context')
+        success, result = await self._api_call_async("GET", f"field/{field_id}/context")
         if success and result:
-            return result.get('values', [])
+            return result.get("values", [])
         return []
 
     # ========== FIELD CONFIGURATION ==========
 
-    def get_field_configurations(self) -> List[Dict]:
+    def get_field_configurations(self) -> list[dict]:
         """Get all field configurations.
 
         Returns:
@@ -551,16 +501,12 @@ class CustomFieldGenerator(JiraAPIClient):
         if self.dry_run:
             return [{"id": 10000, "name": "Default Field Configuration"}]
 
-        response = self._api_call('GET', 'fieldconfiguration')
+        response = self._api_call("GET", "fieldconfiguration")
         if response:
-            return response.json().get('values', [])
+            return response.json().get("values", [])
         return []
 
-    def create_field_configuration(
-        self,
-        name: str,
-        description: Optional[str] = None
-    ) -> Optional[Dict]:
+    def create_field_configuration(self, name: str, description: Optional[str] = None) -> Optional[dict]:
         """Create a field configuration.
 
         Args:
@@ -575,22 +521,14 @@ class CustomFieldGenerator(JiraAPIClient):
             config_data["description"] = description
 
         if self.dry_run:
-            return {
-                "id": random.randint(10000, 99999),
-                "name": name,
-                "description": description or ""
-            }
+            return {"id": random.randint(10000, 99999), "name": name, "description": description or ""}
 
-        response = self._api_call('POST', 'fieldconfiguration', data=config_data)
+        response = self._api_call("POST", "fieldconfiguration", data=config_data)
         if response:
             return response.json()
         return None
 
-    def create_field_configuration_scheme(
-        self,
-        name: str,
-        description: Optional[str] = None
-    ) -> Optional[Dict]:
+    def create_field_configuration_scheme(self, name: str, description: Optional[str] = None) -> Optional[dict]:
         """Create a field configuration scheme.
 
         Args:
@@ -605,13 +543,9 @@ class CustomFieldGenerator(JiraAPIClient):
             scheme_data["description"] = description
 
         if self.dry_run:
-            return {
-                "id": random.randint(10000, 99999),
-                "name": name,
-                "description": description or ""
-            }
+            return {"id": random.randint(10000, 99999), "name": name, "description": description or ""}
 
-        response = self._api_call('POST', 'fieldconfigurationscheme', data=scheme_data)
+        response = self._api_call("POST", "fieldconfigurationscheme", data=scheme_data)
         if response:
             return response.json()
         return None

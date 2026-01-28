@@ -49,7 +49,7 @@ class TestAgileGeneratorBoards:
             responses.GET,
             f"{JIRA_URL}/rest/agile/1.0/board",
             json={"values": [{"id": 1, "name": "Test Board"}]},
-            status=200
+            status=200,
         )
 
         boards = agile_gen.get_boards()
@@ -65,12 +65,7 @@ class TestAgileGeneratorBoards:
     @responses.activate
     def test_get_boards_with_project_filter(self, agile_gen):
         """Test get_boards with project filter."""
-        responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/agile/1.0/board",
-            json={"values": [{"id": 1}]},
-            status=200
-        )
+        responses.add(responses.GET, f"{JIRA_URL}/rest/agile/1.0/board", json={"values": [{"id": 1}]}, status=200)
 
         agile_gen.get_boards(project_key="TEST1")
 
@@ -81,18 +76,13 @@ class TestAgileGeneratorBoards:
     def test_create_board(self, agile_gen):
         """Test create_board."""
         # Mock filter creation
-        responses.add(
-            responses.POST,
-            f"{JIRA_URL}/rest/api/3/filter",
-            json={"id": "10001"},
-            status=201
-        )
+        responses.add(responses.POST, f"{JIRA_URL}/rest/api/3/filter", json={"id": "10001"}, status=201)
         # Mock board creation
         responses.add(
             responses.POST,
             f"{JIRA_URL}/rest/agile/1.0/board",
             json={"id": 1, "name": "TEST Scrum Board 1", "type": "scrum"},
-            status=201
+            status=201,
         )
 
         board = agile_gen.create_board("TEST Scrum Board 1", "TEST1", "scrum")
@@ -113,11 +103,7 @@ class TestAgileGeneratorBoards:
     @responses.activate
     def test_create_board_filter_fails(self, agile_gen):
         """Test create_board when filter creation fails."""
-        responses.add(
-            responses.POST,
-            f"{JIRA_URL}/rest/api/3/filter",
-            status=400
-        )
+        responses.add(responses.POST, f"{JIRA_URL}/rest/api/3/filter", status=400)
 
         board = agile_gen.create_board("TEST Board", "TEST1", "scrum")
 
@@ -127,17 +113,12 @@ class TestAgileGeneratorBoards:
     def test_create_boards(self, agile_gen):
         """Test create_boards creates multiple boards."""
         for i in range(3):
-            responses.add(
-                responses.POST,
-                f"{JIRA_URL}/rest/api/3/filter",
-                json={"id": f"1000{i+1}"},
-                status=201
-            )
+            responses.add(responses.POST, f"{JIRA_URL}/rest/api/3/filter", json={"id": f"1000{i + 1}"}, status=201)
             responses.add(
                 responses.POST,
                 f"{JIRA_URL}/rest/agile/1.0/board",
                 json={"id": i + 1, "type": "scrum" if i % 2 == 0 else "kanban"},
-                status=201
+                status=201,
             )
 
         project_keys = ["TEST1", "TEST2"]
@@ -157,16 +138,12 @@ class TestAgileGeneratorSprints:
             responses.POST,
             f"{JIRA_URL}/rest/agile/1.0/sprint",
             json={"id": 1, "name": "TEST Sprint 1", "state": "future"},
-            status=201
+            status=201,
         )
 
         now = datetime.now()
         sprint = agile_gen.create_sprint(
-            board_id=1,
-            name="TEST Sprint 1",
-            start_date=now,
-            end_date=now + timedelta(weeks=2),
-            goal="Sprint goal"
+            board_id=1, name="TEST Sprint 1", start_date=now, end_date=now + timedelta(weeks=2), goal="Sprint goal"
         )
 
         assert sprint is not None
@@ -175,10 +152,7 @@ class TestAgileGeneratorSprints:
 
     def test_create_sprint_dry_run(self, agile_gen_dry_run):
         """Test create_sprint in dry run."""
-        sprint = agile_gen_dry_run.create_sprint(
-            board_id=1,
-            name="TEST Sprint 1"
-        )
+        sprint = agile_gen_dry_run.create_sprint(board_id=1, name="TEST Sprint 1")
 
         assert sprint is not None
         assert "id" in sprint
@@ -192,7 +166,7 @@ class TestAgileGeneratorSprints:
                 responses.POST,
                 f"{JIRA_URL}/rest/agile/1.0/sprint",
                 json={"id": i + 1, "name": f"TEST Sprint {i + 1}"},
-                status=201
+                status=201,
             )
 
         board_ids = [1, 2]
@@ -213,10 +187,7 @@ class TestAgileGeneratorSprints:
 
         with aioresponses() as m:
             for i in range(3):
-                m.post(
-                    f"{JIRA_URL}/rest/agile/1.0/sprint",
-                    payload={"id": i + 1, "name": f"TEST Sprint {i + 1}"}
-                )
+                m.post(f"{JIRA_URL}/rest/agile/1.0/sprint", payload={"id": i + 1, "name": f"TEST Sprint {i + 1}"})
 
             sprints = await agile_gen.create_sprints_async(board_ids, 3)
 
@@ -236,11 +207,7 @@ class TestAgileGeneratorSprintIssues:
     @responses.activate
     def test_add_issues_to_sprint(self, agile_gen):
         """Test add_issues_to_sprint."""
-        responses.add(
-            responses.POST,
-            f"{JIRA_URL}/rest/agile/1.0/sprint/1/issue",
-            status=204
-        )
+        responses.add(responses.POST, f"{JIRA_URL}/rest/agile/1.0/sprint/1/issue", status=204)
 
         issue_keys = ["TEST1-1", "TEST1-2", "TEST1-3"]
         with patch("time.sleep"):
@@ -263,16 +230,8 @@ class TestAgileGeneratorSprintIssues:
     def test_add_issues_to_sprint_batched(self, agile_gen):
         """Test add_issues_to_sprint with batches."""
         # Two batches needed for 75 issues
-        responses.add(
-            responses.POST,
-            f"{JIRA_URL}/rest/agile/1.0/sprint/1/issue",
-            status=204
-        )
-        responses.add(
-            responses.POST,
-            f"{JIRA_URL}/rest/agile/1.0/sprint/1/issue",
-            status=204
-        )
+        responses.add(responses.POST, f"{JIRA_URL}/rest/agile/1.0/sprint/1/issue", status=204)
+        responses.add(responses.POST, f"{JIRA_URL}/rest/agile/1.0/sprint/1/issue", status=204)
 
         issue_keys = [f"TEST1-{i}" for i in range(1, 76)]
         with patch("time.sleep"):
@@ -285,16 +244,8 @@ class TestAgileGeneratorSprintIssues:
         """Test assign_issues_to_sprints."""
         # Two sprints, should distribute issues
         for _ in range(2):
-            responses.add(
-                responses.POST,
-                f"{JIRA_URL}/rest/agile/1.0/sprint/1/issue",
-                status=204
-            )
-            responses.add(
-                responses.POST,
-                f"{JIRA_URL}/rest/agile/1.0/sprint/2/issue",
-                status=204
-            )
+            responses.add(responses.POST, f"{JIRA_URL}/rest/agile/1.0/sprint/1/issue", status=204)
+            responses.add(responses.POST, f"{JIRA_URL}/rest/agile/1.0/sprint/2/issue", status=204)
 
         sprint_ids = [1, 2]
         issue_keys = [f"TEST1-{i}" for i in range(1, 11)]
@@ -314,10 +265,7 @@ class TestAgileGeneratorSprintIssues:
         issue_keys = ["TEST1-1", "TEST1-2"]
 
         with aioresponses() as m:
-            m.post(
-                f"{JIRA_URL}/rest/agile/1.0/sprint/1/issue",
-                status=204
-            )
+            m.post(f"{JIRA_URL}/rest/agile/1.0/sprint/1/issue", status=204)
 
             count = await agile_gen.add_issues_to_sprint_async(1, issue_keys)
 
@@ -339,14 +287,8 @@ class TestAgileGeneratorSprintIssues:
 
         with aioresponses() as m:
             for _ in range(4):
-                m.post(
-                    f"{JIRA_URL}/rest/agile/1.0/sprint/1/issue",
-                    status=204
-                )
-                m.post(
-                    f"{JIRA_URL}/rest/agile/1.0/sprint/2/issue",
-                    status=204
-                )
+                m.post(f"{JIRA_URL}/rest/agile/1.0/sprint/1/issue", status=204)
+                m.post(f"{JIRA_URL}/rest/agile/1.0/sprint/2/issue", status=204)
 
             count = await agile_gen.assign_issues_to_sprints_async(sprint_ids, issue_keys)
 
@@ -366,12 +308,7 @@ class TestAgileGeneratorAgileAPICall:
     @responses.activate
     def test_agile_api_call(self, agile_gen):
         """Test _agile_api_call uses correct base URL."""
-        responses.add(
-            responses.GET,
-            f"{JIRA_URL}/rest/agile/1.0/test",
-            json={"data": "test"},
-            status=200
-        )
+        responses.add(responses.GET, f"{JIRA_URL}/rest/agile/1.0/test", json={"data": "test"}, status=200)
 
         response = agile_gen._agile_api_call("GET", "test")
 
@@ -382,10 +319,7 @@ class TestAgileGeneratorAgileAPICall:
     async def test_agile_api_call_async(self, agile_gen):
         """Test _agile_api_call_async uses correct base URL."""
         with aioresponses() as m:
-            m.get(
-                f"{JIRA_URL}/rest/agile/1.0/test",
-                payload={"data": "test"}
-            )
+            m.get(f"{JIRA_URL}/rest/agile/1.0/test", payload={"data": "test"})
 
             success, result = await agile_gen._agile_api_call_async("GET", "test")
 
