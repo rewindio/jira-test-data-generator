@@ -392,8 +392,8 @@ Generated emails will be in format:
         """,
     )
 
-    parser.add_argument("--url", required=True, help="Jira URL (e.g., https://mycompany.atlassian.net)")
-    parser.add_argument("--email", required=True, help="Your Jira admin email")
+    parser.add_argument("--url", help="Jira URL (e.g., https://mycompany.atlassian.net) or set JIRA_URL in .env")
+    parser.add_argument("--email", help="Your Jira admin email or set JIRA_EMAIL in .env")
     parser.add_argument("--token", help="Jira API token (or set JIRA_API_TOKEN env var)")
     parser.add_argument("--base-email", required=True, help="Base email for sandbox users (e.g., user@example.com)")
     parser.add_argument("--users", type=int, required=True, help="Number of sandbox users to create")
@@ -420,7 +420,23 @@ Generated emails will be in format:
     # Load environment variables from .env file
     load_dotenv()
 
-    # Get API token
+    # Resolve URL, email, and token from args or environment
+    jira_url = args.url or os.environ.get("JIRA_URL")
+    if not jira_url:
+        print(
+            "Error: Jira URL required. Use --url or set JIRA_URL as an environment variable (or in a .env file)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    jira_email = args.email or os.environ.get("JIRA_EMAIL")
+    if not jira_email:
+        print(
+            "Error: Jira email required. Use --email or set JIRA_EMAIL as an environment variable (or in a .env file)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     api_token = args.token or os.environ.get("JIRA_API_TOKEN")
     if not api_token:
         print("Error: Jira API token required. Use --token or set JIRA_API_TOKEN", file=sys.stderr)
@@ -428,7 +444,7 @@ Generated emails will be in format:
 
     try:
         generator = JiraUserGenerator(
-            jira_url=args.url, email=args.email, api_token=api_token, products=args.products, dry_run=args.dry_run
+            jira_url=jira_url, email=jira_email, api_token=api_token, products=args.products, dry_run=args.dry_run
         )
 
         generator.generate_all(

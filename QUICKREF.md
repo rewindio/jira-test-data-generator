@@ -9,9 +9,10 @@ source venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Setup .env file with your token
+# Setup .env file with your credentials
 cp .env.example .env
-# Edit .env and add: JIRA_API_TOKEN=your_token_here
+# Edit .env and set JIRA_API_TOKEN, JIRA_URL, and JIRA_EMAIL
+# Then you can omit --url and --email from commands below
 ```
 
 ## Running Tests

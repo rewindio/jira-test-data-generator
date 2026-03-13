@@ -312,6 +312,114 @@ class TestJiraDataGeneratorCLI:
 
                         main()
 
+    def test_main_url_email_from_env(self):
+        """Test main gets URL and email from environment variables."""
+        test_args = [
+            "jira_data_generator.py",
+            "--token",
+            "test-token",
+            "--prefix",
+            "TEST",
+            "--count",
+            "5",
+            "--dry-run",
+            "--no-checkpoint",
+        ]
+
+        with patch.object(sys, "argv", test_args):
+            with patch.dict(
+                "os.environ",
+                {"JIRA_URL": "https://env.atlassian.net", "JIRA_EMAIL": "env@example.com"},
+            ):
+                with patch("jira_data_generator.load_dotenv"):
+                    with patch("jira_data_generator.logging.FileHandler", return_value=create_mock_file_handler()):
+                        from jira_data_generator import main
+
+                        main()
+
+    def test_main_cli_args_override_env(self):
+        """Test CLI --url/--email take precedence over environment variables."""
+        test_args = [
+            "jira_data_generator.py",
+            "--url",
+            "https://cli.atlassian.net",
+            "--email",
+            "cli@example.com",
+            "--token",
+            "test-token",
+            "--prefix",
+            "TEST",
+            "--count",
+            "5",
+            "--dry-run",
+            "--no-async",
+            "--no-checkpoint",
+        ]
+
+        with patch.object(sys, "argv", test_args):
+            with patch.dict(
+                "os.environ",
+                {"JIRA_URL": "https://env.atlassian.net", "JIRA_EMAIL": "env@example.com"},
+            ):
+                with patch("jira_data_generator.load_dotenv"):
+                    with patch("jira_data_generator.logging.FileHandler", return_value=create_mock_file_handler()):
+                        with patch("jira_data_generator.JiraDataGenerator") as MockGen:
+                            mock_gen = MagicMock()
+                            MockGen.return_value = mock_gen
+
+                            from jira_data_generator import main
+
+                            main()
+
+                            # Verify CLI args were used, not env vars
+                            call_kwargs = MockGen.call_args[1]
+                            assert call_kwargs["jira_url"] == "https://cli.atlassian.net"
+                            assert call_kwargs["email"] == "cli@example.com"
+
+    def test_main_missing_url_exits(self):
+        """Test main exits when no URL provided via CLI or env."""
+        test_args = [
+            "jira_data_generator.py",
+            "--token",
+            "test-token",
+            "--prefix",
+            "TEST",
+            "--count",
+            "5",
+        ]
+
+        with patch.object(sys, "argv", test_args):
+            with patch.dict("os.environ", {"JIRA_EMAIL": "env@example.com"}, clear=True):
+                with patch("jira_data_generator.load_dotenv"):
+                    with patch("jira_data_generator.logging.FileHandler", return_value=create_mock_file_handler()):
+                        from jira_data_generator import main
+
+                        with pytest.raises(SystemExit) as exc_info:
+                            main()
+                        assert exc_info.value.code == 1
+
+    def test_main_missing_email_exits(self):
+        """Test main exits when no email provided via CLI or env."""
+        test_args = [
+            "jira_data_generator.py",
+            "--token",
+            "test-token",
+            "--prefix",
+            "TEST",
+            "--count",
+            "5",
+        ]
+
+        with patch.object(sys, "argv", test_args):
+            with patch.dict("os.environ", {"JIRA_URL": "https://env.atlassian.net"}, clear=True):
+                with patch("jira_data_generator.load_dotenv"):
+                    with patch("jira_data_generator.logging.FileHandler", return_value=create_mock_file_handler()):
+                        from jira_data_generator import main
+
+                        with pytest.raises(SystemExit) as exc_info:
+                            main()
+                        assert exc_info.value.code == 1
+
 
 class TestJiraUserGeneratorCLI:
     """Tests for jira_user_generator CLI."""
@@ -484,3 +592,106 @@ class TestJiraUserGeneratorCLI:
                     from jira_user_generator import main
 
                     main()
+
+    def test_main_url_email_from_env(self):
+        """Test main gets URL and email from environment variables."""
+        test_args = [
+            "jira_user_generator.py",
+            "--base-email",
+            "test@example.com",
+            "--users",
+            "2",
+            "--dry-run",
+        ]
+
+        with patch.object(sys, "argv", test_args):
+            with patch.dict(
+                "os.environ",
+                {
+                    "JIRA_URL": "https://env.atlassian.net",
+                    "JIRA_EMAIL": "env@example.com",
+                    "JIRA_API_TOKEN": "env-token",
+                },
+            ):
+                with patch("jira_user_generator.load_dotenv"):
+                    from jira_user_generator import main
+
+                    main()
+
+    def test_main_cli_args_override_env(self):
+        """Test CLI --url/--email take precedence over environment variables."""
+        test_args = [
+            "jira_user_generator.py",
+            "--url",
+            "https://cli.atlassian.net",
+            "--email",
+            "cli@example.com",
+            "--token",
+            "test-token",
+            "--base-email",
+            "test@example.com",
+            "--users",
+            "2",
+            "--dry-run",
+        ]
+
+        with patch.object(sys, "argv", test_args):
+            with patch.dict(
+                "os.environ",
+                {"JIRA_URL": "https://env.atlassian.net", "JIRA_EMAIL": "env@example.com"},
+            ):
+                with patch("jira_user_generator.load_dotenv"):
+                    with patch("jira_user_generator.JiraUserGenerator") as MockGen:
+                        mock_gen = MagicMock()
+                        MockGen.return_value = mock_gen
+
+                        from jira_user_generator import main
+
+                        main()
+
+                        # Verify CLI args were used, not env vars
+                        call_kwargs = MockGen.call_args[1]
+                        assert call_kwargs["jira_url"] == "https://cli.atlassian.net"
+                        assert call_kwargs["email"] == "cli@example.com"
+
+    def test_main_missing_url_exits(self):
+        """Test main exits when no URL provided via CLI or env."""
+        test_args = [
+            "jira_user_generator.py",
+            "--token",
+            "test-token",
+            "--base-email",
+            "test@example.com",
+            "--users",
+            "2",
+        ]
+
+        with patch.object(sys, "argv", test_args):
+            with patch.dict("os.environ", {"JIRA_EMAIL": "env@example.com"}, clear=True):
+                with patch("jira_user_generator.load_dotenv"):
+                    from jira_user_generator import main
+
+                    with pytest.raises(SystemExit) as exc_info:
+                        main()
+                    assert exc_info.value.code == 1
+
+    def test_main_missing_email_exits(self):
+        """Test main exits when no email provided via CLI or env."""
+        test_args = [
+            "jira_user_generator.py",
+            "--token",
+            "test-token",
+            "--base-email",
+            "test@example.com",
+            "--users",
+            "2",
+        ]
+
+        with patch.object(sys, "argv", test_args):
+            with patch.dict("os.environ", {"JIRA_URL": "https://env.atlassian.net"}, clear=True):
+                with patch("jira_user_generator.load_dotenv"):
+                    from jira_user_generator import main
+
+                    with pytest.raises(SystemExit) as exc_info:
+                        main()
+                    assert exc_info.value.code == 1

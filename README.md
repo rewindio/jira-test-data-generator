@@ -182,8 +182,8 @@ python jira_data_generator.py \
 
 | Option | Required | Description | Default |
 |--------|----------|-------------|---------|
-| `--url` | Yes | Jira instance URL | - |
-| `--email` | Yes | Your Jira email | - |
+| `--url` | No* | Jira instance URL | From env |
+| `--email` | No* | Your Jira email | From env |
 | `--token` | No* | API token | From env |
 | `--prefix` | Yes | Prefix for items and project keys | - |
 | `--count` | Yes | Number of issues to create | - |
@@ -198,7 +198,7 @@ python jira_data_generator.py \
 | `--resume` | No | Resume from existing checkpoint | `false` |
 | `--no-checkpoint` | No | Disable checkpointing entirely | `false` |
 
-\* Token can also be set via `JIRA_API_TOKEN` environment variable or `.env` file
+\* URL, email, and token can be set via environment variables (`JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`) or in a `.env` file. CLI arguments take precedence.
 
 ## Concurrency & Performance
 
@@ -769,8 +769,8 @@ python jira_user_generator.py \
 
 | Option | Required | Description | Default |
 |--------|----------|-------------|---------|
-| `--url` | Yes | Jira instance URL | - |
-| `--email` | Yes | Your Jira admin email | - |
+| `--url` | No* | Jira instance URL | From env |
+| `--email` | No* | Your Jira admin email | From env |
 | `--token` | No* | API token | From env |
 | `--base-email` | Yes | Base email for sandbox users | - |
 | `--users` | Yes | Number of users to create | - |

@@ -26,9 +26,9 @@ if [ -z "$JIRA_API_TOKEN" ]; then
     fi
 fi
 
-# Configuration - CHANGE THESE
-JIRA_URL="https://mycompany.atlassian.net"
-JIRA_EMAIL="your.email@company.com"
+# Configuration - CHANGE THESE (or set in .env file)
+JIRA_URL="${JIRA_URL:-https://mycompany.atlassian.net}"
+JIRA_EMAIL="${JIRA_EMAIL:-your.email@company.com}"
 
 echo -e "${GREEN}Jira Data Generator - Example Scenarios${NC}\n"
 
