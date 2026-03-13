@@ -1166,8 +1166,8 @@ Checkpointing:
         """,
     )
 
-    parser.add_argument("--url", required=True, help="Jira URL (e.g., https://mycompany.atlassian.net)")
-    parser.add_argument("--email", required=True, help="Your Jira email")
+    parser.add_argument("--url", help="Jira URL (e.g., https://mycompany.atlassian.net) or set JIRA_URL in .env")
+    parser.add_argument("--email", help="Your Jira email or set JIRA_EMAIL in .env")
     parser.add_argument("--token", help="Jira API token (or set JIRA_API_TOKEN in .env file or env var)")
     parser.add_argument("--prefix", required=True, help="Prefix for all created items and project keys (e.g., PERF)")
     parser.add_argument("--count", type=int, required=True, help="Number of issues to create")
@@ -1240,7 +1240,23 @@ Checkpointing:
     # Load environment variables from .env file
     load_dotenv()
 
-    # Get API token
+    # Resolve URL, email, and token from args or environment
+    jira_url = args.url or os.environ.get("JIRA_URL")
+    if not jira_url:
+        print(
+            "Error: Jira URL required. Use --url or set JIRA_URL in .env file or environment variable",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    jira_email = args.email or os.environ.get("JIRA_EMAIL")
+    if not jira_email:
+        print(
+            "Error: Jira email required. Use --email or set JIRA_EMAIL in .env file or environment variable",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     api_token = args.token or os.environ.get("JIRA_API_TOKEN")
     if not api_token:
         print(
@@ -1262,8 +1278,8 @@ Checkpointing:
                 if loaded:
                     logging.info(f"Found checkpoint: {checkpoint_path}")
                     # Validate checkpoint matches current parameters
-                    if loaded.jira_url != args.url:
-                        logging.warning(f"Checkpoint URL ({loaded.jira_url}) differs from current ({args.url})")
+                    if loaded.jira_url != jira_url:
+                        logging.warning(f"Checkpoint URL ({loaded.jira_url}) differs from current ({jira_url})")
                     if loaded.target_issue_count != args.count:
                         logging.warning(
                             f"Checkpoint target count ({loaded.target_issue_count}) differs from current ({args.count})"
@@ -1286,8 +1302,8 @@ Checkpointing:
 
     try:
         generator = JiraDataGenerator(
-            jira_url=args.url,
-            email=args.email,
+            jira_url=jira_url,
+            email=jira_email,
             api_token=api_token,
             prefix=args.prefix,
             size_bucket=args.size,
