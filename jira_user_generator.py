@@ -423,12 +423,18 @@ Generated emails will be in format:
     # Resolve URL, email, and token from args or environment
     jira_url = args.url or os.environ.get("JIRA_URL")
     if not jira_url:
-        print("Error: Jira URL required. Use --url or set JIRA_URL as an environment variable (or in a .env file)", file=sys.stderr)
+        print(
+            "Error: Jira URL required. Use --url or set JIRA_URL as an environment variable (or in a .env file)",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     jira_email = args.email or os.environ.get("JIRA_EMAIL")
     if not jira_email:
-        print("Error: Jira email required. Use --email or set JIRA_EMAIL as an environment variable (or in a .env file)", file=sys.stderr)
+        print(
+            "Error: Jira email required. Use --email or set JIRA_EMAIL as an environment variable (or in a .env file)",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     api_token = args.token or os.environ.get("JIRA_API_TOKEN")
