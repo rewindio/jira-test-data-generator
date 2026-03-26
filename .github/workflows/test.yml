@@ -39,7 +39,7 @@ jobs:
                  | tee pytest-coverage.txt
 
       - name: Post coverage comment
-        uses: MishaKav/pytest-coverage-comment@ef975f05ff4ca5a053e7d42ceb31000a085d17e4 # main
+        uses: MishaKav/pytest-coverage-comment@45d7be6c0a6b6d3c3a5fc40345e8fb4a1c4aa800 # main
         if: github.event_name == 'pull_request'
         with:
           pytest-coverage-path: pytest-coverage.txt
